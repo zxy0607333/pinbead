@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 
-const sizes = ["16 x 16", "24 x 24", "32 x 32", "48 x 48"];
+const sizeOptions = [16, 24, 32, 48, 64];
 const colorCounts = ["8 colors", "16 colors", "24 colors", "32 colors"];
 const palettes = ["Pinbead starter", "Perler", "Hama", "Artkal"];
 const acceptedTypes = ["image/png", "image/jpeg", "image/webp"];
@@ -27,6 +27,34 @@ type DecodedImage = {
   height: number;
   close?: () => void;
 };
+
+type CropMode = "square" | "original";
+
+function getPatternSize(
+  sourceWidth: number | undefined,
+  sourceHeight: number | undefined,
+  maxSide: number,
+  cropMode: CropMode,
+) {
+  if (cropMode === "square" || !sourceWidth || !sourceHeight) {
+    return {
+      width: maxSide,
+      height: maxSide,
+    };
+  }
+
+  if (sourceWidth >= sourceHeight) {
+    return {
+      width: maxSide,
+      height: Math.max(1, Math.round((sourceHeight / sourceWidth) * maxSide)),
+    };
+  }
+
+  return {
+    width: Math.max(1, Math.round((sourceWidth / sourceHeight) * maxSide)),
+    height: maxSide,
+  };
+}
 
 function formatBytes(bytes: number) {
   if (bytes < 1024 * 1024) {
@@ -139,6 +167,19 @@ export function HomePatternMaker() {
   const [preview, setPreview] = useState<ImagePreview | null>(null);
   const [error, setError] = useState("");
   const [isPreparing, setIsPreparing] = useState(false);
+  const [cropMode, setCropMode] = useState<CropMode>("square");
+  const [maxSide, setMaxSide] = useState(32);
+
+  const patternSize = getPatternSize(
+    preview?.width,
+    preview?.height,
+    maxSide,
+    cropMode,
+  );
+  const cropPreviewRatio =
+    cropMode === "square"
+      ? "1 / 1"
+      : `${patternSize.width} / ${patternSize.height}`;
 
   useEffect(() => {
     return () => {
@@ -295,14 +336,99 @@ export function HomePatternMaker() {
         </div>
       </div>
 
+      {preview ? (
+        <div className="mt-5 rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-[var(--foreground)]">
+                Crop preview
+              </p>
+              <p className="mt-1 text-sm leading-6 text-[var(--muted)]">
+                Square crop uses the centered area. Original ratio keeps the
+                full image shape.
+              </p>
+            </div>
+            <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[var(--accent)]">
+              {patternSize.width} x {patternSize.height} beads
+            </span>
+          </div>
+
+          <div
+            aria-label={`${cropMode} crop preview for ${preview.name}`}
+            className="mt-4 mx-auto w-full max-w-[240px] rounded-md border border-[var(--border)] bg-white bg-center bg-no-repeat shadow-sm"
+            role="img"
+            style={{
+              aspectRatio: cropPreviewRatio,
+              backgroundImage: `url(${preview.url})`,
+              backgroundSize: cropMode === "square" ? "cover" : "contain",
+            }}
+          />
+        </div>
+      ) : null}
+
       <div className="mt-5 grid gap-4 sm:grid-cols-3">
+        <fieldset className="sm:col-span-3">
+          <legend className="text-sm font-medium text-[var(--foreground)]">
+            Crop
+          </legend>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            <label
+              className={`cursor-pointer rounded-md border px-3 py-3 text-sm transition ${
+                cropMode === "square"
+                  ? "border-[var(--accent)] bg-[var(--surface-soft)] text-[var(--foreground)]"
+                  : "border-[var(--border)] bg-white text-[var(--muted)] hover:border-[var(--accent)]"
+              }`}
+            >
+              <input
+                checked={cropMode === "square"}
+                className="sr-only"
+                name="cropMode"
+                onChange={() => setCropMode("square")}
+                type="radio"
+              />
+              <span className="block font-semibold">Square crop</span>
+              <span className="mt-1 block leading-5">
+                Best for icons, keychains, and simple beginner patterns.
+              </span>
+            </label>
+            <label
+              className={`cursor-pointer rounded-md border px-3 py-3 text-sm transition ${
+                cropMode === "original"
+                  ? "border-[var(--accent)] bg-[var(--surface-soft)] text-[var(--foreground)]"
+                  : "border-[var(--border)] bg-white text-[var(--muted)] hover:border-[var(--accent)]"
+              }`}
+            >
+              <input
+                checked={cropMode === "original"}
+                className="sr-only"
+                name="cropMode"
+                onChange={() => setCropMode("original")}
+                type="radio"
+              />
+              <span className="block font-semibold">Original ratio</span>
+              <span className="mt-1 block leading-5">
+                Keeps the full image shape and adjusts the bead height.
+              </span>
+            </label>
+          </div>
+        </fieldset>
+
         <label className="text-sm font-medium text-[var(--foreground)]">
           Size
-          <select className="mt-2 w-full rounded-md border border-[var(--border)] bg-white px-3 py-2 text-sm text-[var(--foreground)]">
-            {sizes.map((size) => (
-              <option key={size}>{size}</option>
+          <select
+            className="mt-2 w-full rounded-md border border-[var(--border)] bg-white px-3 py-2 text-sm text-[var(--foreground)]"
+            onChange={(event) => setMaxSide(Number(event.target.value))}
+            value={maxSide}
+          >
+            {sizeOptions.map((size) => (
+              <option key={size} value={size}>
+                {size} bead max side
+              </option>
             ))}
           </select>
+          <span className="mt-2 block text-xs leading-5 text-[var(--muted)]">
+            Larger grids keep more detail but need more beads and patience.
+          </span>
         </label>
         <label className="text-sm font-medium text-[var(--foreground)]">
           Palette
@@ -320,6 +446,14 @@ export function HomePatternMaker() {
             ))}
           </select>
         </label>
+      </div>
+
+      <div className="mt-5 rounded-md border border-[var(--border)] bg-white px-4 py-3 text-sm leading-6 text-[var(--muted)]">
+        Target pattern:{" "}
+        <strong className="font-semibold text-[var(--foreground)]">
+          {patternSize.width} x {patternSize.height} beads
+        </strong>
+        . The next step will pixelate the selected crop into exactly this grid.
       </div>
     </section>
   );

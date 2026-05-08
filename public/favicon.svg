@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Pinbead">
+  <rect width="64" height="64" rx="12" fill="#f8faf7"/>
+  <circle cx="22" cy="22" r="8" fill="#24786a"/>
+  <circle cx="42" cy="22" r="8" fill="#e7b548"/>
+  <circle cx="22" cy="42" r="8" fill="#d95d39"/>
+  <circle cx="42" cy="42" r="8" fill="#2f4f7f"/>
+</svg>
+

@@ -30,6 +30,15 @@ type DecodedImage = {
 
 type CropMode = "square" | "original";
 
+type PatternSize = {
+  width: number;
+  height: number;
+};
+
+type PixelPattern = PatternSize & {
+  cells: string[];
+};
+
 function getPatternSize(
   sourceWidth: number | undefined,
   sourceHeight: number | undefined,
@@ -54,6 +63,40 @@ function getPatternSize(
     width: Math.max(1, Math.round((sourceWidth / sourceHeight) * maxSide)),
     height: maxSide,
   };
+}
+
+function getCropSourceRect(
+  sourceWidth: number,
+  sourceHeight: number,
+  cropMode: CropMode,
+) {
+  if (cropMode === "original") {
+    return {
+      sx: 0,
+      sy: 0,
+      sw: sourceWidth,
+      sh: sourceHeight,
+    };
+  }
+
+  const size = Math.min(sourceWidth, sourceHeight);
+
+  return {
+    sx: Math.round((sourceWidth - size) / 2),
+    sy: Math.round((sourceHeight - size) / 2),
+    sw: size,
+    sh: size,
+  };
+}
+
+function componentToHex(value: number) {
+  return value.toString(16).padStart(2, "0");
+}
+
+function rgbToHex(red: number, green: number, blue: number) {
+  return `#${componentToHex(red)}${componentToHex(green)}${componentToHex(
+    blue,
+  )}`;
 }
 
 function formatBytes(bytes: number) {
@@ -109,6 +152,30 @@ async function decodeImage(file: File): Promise<DecodedImage> {
   return loadImageElement(file);
 }
 
+function loadImageUrl(url: string): Promise<DecodedImage> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+
+    image.onload = () => {
+      resolve({
+        image,
+        width: image.naturalWidth,
+        height: image.naturalHeight,
+      });
+    };
+    image.onerror = () => {
+      reject(new Error("This image could not be pixelated."));
+    };
+    image.src = url;
+  });
+}
+
+function waitForNextFrame() {
+  return new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
+}
+
 async function createPreview(file: File): Promise<ImagePreview> {
   const decoded = await decodeImage(file);
 
@@ -161,12 +228,79 @@ async function createPreview(file: File): Promise<ImagePreview> {
   }
 }
 
+async function createPixelPattern(
+  imageUrl: string,
+  patternSize: PatternSize,
+  cropMode: CropMode,
+): Promise<PixelPattern> {
+  await waitForNextFrame();
+
+  const decoded = await loadImageUrl(imageUrl);
+
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = patternSize.width;
+    canvas.height = patternSize.height;
+
+    const context = canvas.getContext("2d", {
+      alpha: false,
+      willReadFrequently: true,
+    });
+
+    if (!context) {
+      throw new Error("Your browser could not prepare the pixel pattern.");
+    }
+
+    const source = getCropSourceRect(decoded.width, decoded.height, cropMode);
+
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, patternSize.width, patternSize.height);
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
+    context.drawImage(
+      decoded.image,
+      source.sx,
+      source.sy,
+      source.sw,
+      source.sh,
+      0,
+      0,
+      patternSize.width,
+      patternSize.height,
+    );
+
+    const { data } = context.getImageData(
+      0,
+      0,
+      patternSize.width,
+      patternSize.height,
+    );
+    const cells: string[] = [];
+
+    for (let index = 0; index < data.length; index += 4) {
+      cells.push(rgbToHex(data[index], data[index + 1], data[index + 2]));
+    }
+
+    return {
+      width: patternSize.width,
+      height: patternSize.height,
+      cells,
+    };
+  } finally {
+    decoded.close?.();
+  }
+}
+
 export function HomePatternMaker() {
   const fileInputId = useId();
   const previewRequestId = useRef(0);
+  const pixelRequestId = useRef(0);
   const [preview, setPreview] = useState<ImagePreview | null>(null);
+  const [pixelPattern, setPixelPattern] = useState<PixelPattern | null>(null);
   const [error, setError] = useState("");
   const [isPreparing, setIsPreparing] = useState(false);
+  const [isPixelating, setIsPixelating] = useState(false);
+  const [pixelError, setPixelError] = useState("");
   const [cropMode, setCropMode] = useState<CropMode>("square");
   const [maxSide, setMaxSide] = useState(32);
 
@@ -176,10 +310,12 @@ export function HomePatternMaker() {
     maxSide,
     cropMode,
   );
+  const patternWidth = patternSize.width;
+  const patternHeight = patternSize.height;
   const cropPreviewRatio =
     cropMode === "square"
       ? "1 / 1"
-      : `${patternSize.width} / ${patternSize.height}`;
+      : `${patternWidth} / ${patternHeight}`;
 
   useEffect(() => {
     return () => {
@@ -188,6 +324,55 @@ export function HomePatternMaker() {
       }
     };
   }, [preview]);
+
+  useEffect(() => {
+    const requestId = pixelRequestId.current + 1;
+    pixelRequestId.current = requestId;
+
+    if (!preview) {
+      return;
+    }
+
+    const pixelate = async () => {
+      await waitForNextFrame();
+
+      if (pixelRequestId.current === requestId) {
+        setPixelPattern(null);
+        setIsPixelating(true);
+        setPixelError("");
+      }
+
+      try {
+        const nextPattern = await createPixelPattern(
+          preview.url,
+          {
+            width: patternWidth,
+            height: patternHeight,
+          },
+          cropMode,
+        );
+
+        if (pixelRequestId.current === requestId) {
+          setPixelPattern(nextPattern);
+        }
+      } catch (patternError) {
+        if (pixelRequestId.current === requestId) {
+          setPixelPattern(null);
+          setPixelError(
+            patternError instanceof Error
+              ? patternError.message
+              : "This image could not be pixelated.",
+          );
+        }
+      } finally {
+        if (pixelRequestId.current === requestId) {
+          setIsPixelating(false);
+        }
+      }
+    };
+
+    void pixelate();
+  }, [cropMode, patternHeight, patternWidth, preview]);
 
   async function handleImageChange(event: ChangeEvent<HTMLInputElement>) {
     const requestId = previewRequestId.current + 1;
@@ -349,7 +534,7 @@ export function HomePatternMaker() {
               </p>
             </div>
             <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[var(--accent)]">
-              {patternSize.width} x {patternSize.height} beads
+              {patternWidth} x {patternHeight} beads
             </span>
           </div>
 
@@ -451,10 +636,65 @@ export function HomePatternMaker() {
       <div className="mt-5 rounded-md border border-[var(--border)] bg-white px-4 py-3 text-sm leading-6 text-[var(--muted)]">
         Target pattern:{" "}
         <strong className="font-semibold text-[var(--foreground)]">
-          {patternSize.width} x {patternSize.height} beads
+          {patternWidth} x {patternHeight} beads
         </strong>
-        . The next step will pixelate the selected crop into exactly this grid.
+        . Transparent pixels are placed on a white background for this first
+        version.
       </div>
+
+      {preview ? (
+        <div className="mt-5 rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-[var(--foreground)]">
+                Pixel pattern preview
+              </p>
+              <p className="mt-1 text-sm leading-6 text-[var(--muted)]">
+                Each square is one bead position in the target grid.
+              </p>
+            </div>
+            <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[var(--accent)]">
+              {pixelPattern
+                ? `${pixelPattern.cells.length} cells`
+                : "Preparing"}
+            </span>
+          </div>
+
+          <div aria-live="polite" className="mt-4 min-h-6" role="status">
+            {isPixelating ? (
+              <p className="text-sm font-medium text-[var(--accent)]">
+                Pixelating the selected crop...
+              </p>
+            ) : null}
+            {pixelError ? (
+              <p className="text-sm font-medium text-[var(--accent-strong)]">
+                {pixelError}
+              </p>
+            ) : null}
+          </div>
+
+          {pixelPattern && !pixelError ? (
+            <div
+              aria-label={`Pixelated ${pixelPattern.width} by ${pixelPattern.height} bead pattern`}
+              className="mx-auto mt-4 grid aspect-square w-full max-w-[280px] overflow-hidden rounded-md border border-[var(--border)] bg-white shadow-sm"
+              role="img"
+              style={{
+                aspectRatio: `${pixelPattern.width} / ${pixelPattern.height}`,
+                gridTemplateColumns: `repeat(${pixelPattern.width}, minmax(0, 1fr))`,
+              }}
+            >
+              {pixelPattern.cells.map((color, index) => (
+                <span
+                  aria-hidden="true"
+                  className="aspect-square"
+                  key={`${color}-${index}`}
+                  style={{ backgroundColor: color }}
+                />
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </section>
   );
 }

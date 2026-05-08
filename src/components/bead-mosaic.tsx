@@ -26,19 +26,26 @@ const pattern = [
 
 export function BeadMosaic() {
   return (
-    <div
-      aria-label="A bead pattern preview"
-      className="grid aspect-square w-full max-w-[420px] grid-cols-12 gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm"
-      role="img"
-    >
-      {pattern.map((colorIndex, index) => (
-        <span
-          className="aspect-square rounded-full border border-black/10 shadow-[inset_0_1px_2px_rgba(255,255,255,0.65)]"
-          key={`${colorIndex}-${index}`}
-          style={{ backgroundColor: beadColors[colorIndex] }}
-        />
-      ))}
-    </div>
+    <figure className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
+      <div
+        aria-label="A bead pattern preview"
+        className="grid aspect-square w-full grid-cols-12 gap-1.5 sm:gap-2"
+        role="img"
+      >
+        {pattern.map((colorIndex, index) => (
+          <span
+            className="aspect-square rounded-full border border-black/10 shadow-[inset_0_1px_2px_rgba(255,255,255,0.65)]"
+            key={`${colorIndex}-${index}`}
+            style={{ backgroundColor: beadColors[colorIndex] }}
+          />
+        ))}
+      </div>
+      <figcaption className="mt-4 flex items-center justify-between gap-4 border-t border-[var(--border)] pt-4 text-sm">
+        <span className="font-medium text-[var(--foreground)]">
+          Beginner preview
+        </span>
+        <span className="text-[var(--muted)]">12 x 12 beads</span>
+      </figcaption>
+    </figure>
   );
 }
-

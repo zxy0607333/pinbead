@@ -405,6 +405,15 @@ export function HomePatternMaker() {
     cropMode === "square"
       ? "1 / 1"
       : `${patternWidth} / ${patternHeight}`;
+  const totalBeadCount = pixelPattern
+    ? pixelPattern.matchedColors.reduce(
+        (totalCount, color) => totalCount + color.count,
+        0,
+      )
+    : 0;
+  const beadCountMatchesPreview = pixelPattern
+    ? totalBeadCount === pixelPattern.cells.length
+    : false;
 
   useEffect(() => {
     return () => {
@@ -928,17 +937,57 @@ export function HomePatternMaker() {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-[var(--foreground)]">
-                    Matched bead colors
+                    Bead count list
                   </p>
                   <p className="mt-1 text-sm leading-6 text-[var(--muted)]">
-                    {pixelPattern.paletteName} is applied as a fixed bead color
-                    card, so the preview no longer uses arbitrary RGB values.
+                    This color list is generated from the current preview, so
+                    bead counts stay in sync when you change size, palette, or
+                    color limit.
                   </p>
                 </div>
                 <span className="rounded-full bg-[var(--surface-soft)] px-3 py-1 text-xs font-semibold text-[var(--accent)]">
-                  {pixelPattern.matchedColors.length} /{" "}
-                  {pixelPattern.effectiveColorLimit} colors used
+                  {totalBeadCount} total beads
                 </span>
+              </div>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <div className="rounded-md border border-[var(--border)] bg-[var(--surface-soft)] px-3 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">
+                    Total beads
+                  </p>
+                  <p className="mt-2 text-2xl font-semibold text-[var(--foreground)]">
+                    {totalBeadCount}
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
+                    {pixelPattern.width} x {pixelPattern.height} pattern grid
+                  </p>
+                </div>
+
+                <div className="rounded-md border border-[var(--border)] bg-[var(--surface-soft)] px-3 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">
+                    Colors used
+                  </p>
+                  <p className="mt-2 text-2xl font-semibold text-[var(--foreground)]">
+                    {pixelPattern.matchedColors.length}
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
+                    Up to {pixelPattern.effectiveColorLimit} colors allowed
+                  </p>
+                </div>
+
+                <div className="rounded-md border border-[var(--border)] bg-[var(--surface-soft)] px-3 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">
+                    Active palette
+                  </p>
+                  <p className="mt-2 text-base font-semibold text-[var(--foreground)]">
+                    {pixelPattern.paletteName}
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
+                    {beadCountMatchesPreview
+                      ? "The color counts below add up to the full preview."
+                      : "The color counts are being recalculated for this preview."}
+                  </p>
+                </div>
               </div>
 
               <div className="mt-4 rounded-md border border-[var(--border)] bg-[var(--surface-soft)] px-3 py-3 text-sm leading-6 text-[var(--muted)]">
@@ -990,6 +1039,14 @@ export function HomePatternMaker() {
                     </span>
                   </div>
                 ))}
+              </div>
+
+              <div className="mt-4 rounded-md border border-dashed border-[var(--border)] bg-white px-3 py-3 text-xs leading-5 text-[var(--muted)]">
+                Color counts sum to{" "}
+                <strong className="font-semibold text-[var(--foreground)]">
+                  {totalBeadCount}
+                </strong>{" "}
+                bead positions in the current pattern preview.
               </div>
             </div>
           ) : null}

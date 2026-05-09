@@ -38,6 +38,7 @@ type DecodedImage = {
 };
 
 type CropMode = "square" | "original";
+type PreviewMode = "pixels" | "beads";
 
 type PatternSize = {
   width: number;
@@ -381,6 +382,8 @@ export function HomePatternMaker() {
   const [isPixelating, setIsPixelating] = useState(false);
   const [pixelError, setPixelError] = useState("");
   const [cropMode, setCropMode] = useState<CropMode>("square");
+  const [previewMode, setPreviewMode] = useState<PreviewMode>("pixels");
+  const [showGridLines, setShowGridLines] = useState(true);
   const [maxSide, setMaxSide] = useState(32);
   const [selectedColorLimit, setSelectedColorLimit] =
     useState(defaultColorLimit);
@@ -773,10 +776,11 @@ export function HomePatternMaker() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-[var(--foreground)]">
-                  Pixel pattern preview
+                  Pattern preview
                 </p>
                 <p className="mt-1 text-sm leading-6 text-[var(--muted)]">
-                  Each square is one bead position in the target grid.
+                  Switch between a clean pixel grid and a round bead mockup
+                  without changing the pattern size.
                 </p>
               </div>
               <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[var(--accent)]">
@@ -801,23 +805,119 @@ export function HomePatternMaker() {
               ) : null}
             </div>
 
+            <div className="mt-4 grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,180px)]">
+              <fieldset>
+                <legend className="text-sm font-medium text-[var(--foreground)]">
+                  Preview mode
+                </legend>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  <label
+                    className={`cursor-pointer rounded-md border px-3 py-3 text-sm transition ${
+                      previewMode === "pixels"
+                        ? "border-[var(--accent)] bg-white text-[var(--foreground)]"
+                        : "border-[var(--border)] bg-[var(--surface-soft)] text-[var(--muted)] hover:border-[var(--accent)]"
+                    }`}
+                  >
+                    <input
+                      checked={previewMode === "pixels"}
+                      className="sr-only"
+                      name="previewMode"
+                      onChange={() => setPreviewMode("pixels")}
+                      type="radio"
+                    />
+                    <span className="block font-semibold">Pixel grid</span>
+                    <span className="mt-1 block leading-5">
+                      Best for counting rows and checking the bead layout.
+                    </span>
+                  </label>
+                  <label
+                    className={`cursor-pointer rounded-md border px-3 py-3 text-sm transition ${
+                      previewMode === "beads"
+                        ? "border-[var(--accent)] bg-white text-[var(--foreground)]"
+                        : "border-[var(--border)] bg-[var(--surface-soft)] text-[var(--muted)] hover:border-[var(--accent)]"
+                    }`}
+                  >
+                    <input
+                      checked={previewMode === "beads"}
+                      className="sr-only"
+                      name="previewMode"
+                      onChange={() => setPreviewMode("beads")}
+                      type="radio"
+                    />
+                    <span className="block font-semibold">Round beads</span>
+                    <span className="mt-1 block leading-5">
+                      Simulates the finished bead look with circular pieces.
+                    </span>
+                  </label>
+                </div>
+              </fieldset>
+
+              <label className="rounded-md border border-[var(--border)] bg-white px-3 py-3 text-sm text-[var(--foreground)]">
+                <span className="flex items-center justify-between gap-3">
+                  <span>
+                    <span className="block font-semibold">Grid lines</span>
+                    <span className="mt-1 block text-xs leading-5 text-[var(--muted)]">
+                      Helpful for row-by-row counting on both preview modes.
+                    </span>
+                  </span>
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                      showGridLines
+                        ? "bg-[var(--surface-soft)] text-[var(--accent)]"
+                        : "bg-[var(--border)] text-[var(--muted)]"
+                    }`}
+                  >
+                    {showGridLines ? "On" : "Off"}
+                  </span>
+                </span>
+                <input
+                  checked={showGridLines}
+                  className="sr-only"
+                  onChange={(event) => setShowGridLines(event.target.checked)}
+                  type="checkbox"
+                />
+              </label>
+            </div>
+
             {pixelPattern && !pixelError ? (
               <div
-                aria-label={`Pixelated ${pixelPattern.width} by ${pixelPattern.height} bead pattern using ${pixelPattern.paletteName}`}
-                className="mx-auto mt-4 grid aspect-square w-full max-w-[280px] overflow-hidden rounded-md border border-[var(--border)] bg-white shadow-sm"
+                aria-label={`${previewMode === "beads" ? "Round bead" : "Pixel"} preview for a ${pixelPattern.width} by ${pixelPattern.height} bead pattern using ${pixelPattern.paletteName}${showGridLines ? " with grid lines" : ""}`}
+                className="mx-auto mt-4 grid w-full max-w-[300px] overflow-hidden rounded-md border border-[var(--border)] shadow-sm sm:max-w-[360px]"
                 role="img"
                 style={{
                   aspectRatio: `${pixelPattern.width} / ${pixelPattern.height}`,
+                  backgroundColor: showGridLines
+                    ? "var(--border)"
+                    : "var(--surface)",
+                  gap: showGridLines ? "1px" : "0px",
                   gridTemplateColumns: `repeat(${pixelPattern.width}, minmax(0, 1fr))`,
                 }}
               >
                 {pixelPattern.cells.map((color, index) => (
                   <span
                     aria-hidden="true"
-                    className="aspect-square"
+                    className={`aspect-square ${
+                      previewMode === "beads"
+                        ? "flex items-center justify-center"
+                        : ""
+                    }`}
                     key={`${color}-${index}`}
-                    style={{ backgroundColor: color }}
-                  />
+                    style={{
+                      backgroundColor:
+                        previewMode === "pixels"
+                          ? color
+                          : showGridLines
+                            ? "var(--surface)"
+                            : "transparent",
+                    }}
+                  >
+                    {previewMode === "beads" ? (
+                      <span
+                        className="block h-[84%] w-[84%] rounded-full border border-black/10 shadow-[inset_0_1px_2px_rgba(255,255,255,0.65),0_1px_1px_rgba(15,17,16,0.08)]"
+                        style={{ backgroundColor: color }}
+                      />
+                    ) : null}
+                  </span>
                 ))}
               </div>
             ) : null}

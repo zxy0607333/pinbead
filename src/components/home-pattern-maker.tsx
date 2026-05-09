@@ -1,11 +1,19 @@
 "use client";
 
+import { defaultBeadPaletteId } from "@/data/bead-palettes";
+import {
+  matchRgbToBeadColor,
+  preparedBeadPaletteMap,
+  preparedBeadPalettes,
+  type PreparedBeadPalette,
+  type PreparedBeadPaletteColor,
+} from "@/lib/bead-color-matching";
 import { useEffect, useId, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 
 const sizeOptions = [16, 24, 32, 48, 64];
-const colorCounts = ["8 colors", "16 colors", "24 colors", "32 colors"];
-const palettes = ["Pinbead starter", "Perler", "Hama", "Artkal"];
+const colorCountOptions = [8, 16, 24, 32];
+const upcomingColorLimit = 24;
 const acceptedTypes = ["image/png", "image/jpeg", "image/webp"];
 const maxFileSize = 15 * 1024 * 1024;
 const maxInputPixels = 36_000_000;
@@ -35,8 +43,20 @@ type PatternSize = {
   height: number;
 };
 
+type MatchedPatternColor = {
+  id: string;
+  brand: string;
+  code: string;
+  name: string;
+  hex: string;
+  count: number;
+};
+
 type PixelPattern = PatternSize & {
   cells: string[];
+  matchedColors: MatchedPatternColor[];
+  paletteId: string;
+  paletteName: string;
 };
 
 function getPatternSize(
@@ -232,6 +252,7 @@ async function createPixelPattern(
   imageUrl: string,
   patternSize: PatternSize,
   cropMode: CropMode,
+  palette: PreparedBeadPalette,
 ): Promise<PixelPattern> {
   await waitForNextFrame();
 
@@ -276,15 +297,66 @@ async function createPixelPattern(
       patternSize.height,
     );
     const cells: string[] = [];
+    const matchedColorCache = new Map<string, PreparedBeadPaletteColor>();
+    const matchedColorCounts = new Map<string, number>();
+    const paletteColorsById = new Map(
+      palette.colors.map((color) => [color.id, color]),
+    );
 
     for (let index = 0; index < data.length; index += 4) {
-      cells.push(rgbToHex(data[index], data[index + 1], data[index + 2]));
+      const sourceRed = data[index];
+      const sourceGreen = data[index + 1];
+      const sourceBlue = data[index + 2];
+      const sourceHex = rgbToHex(sourceRed, sourceGreen, sourceBlue);
+      let matchedColor = matchedColorCache.get(sourceHex);
+
+      if (!matchedColor) {
+        matchedColor = matchRgbToBeadColor(
+          sourceRed,
+          sourceGreen,
+          sourceBlue,
+          palette,
+        ).color;
+        matchedColorCache.set(sourceHex, matchedColor);
+      }
+
+      cells.push(matchedColor.hex);
+      matchedColorCounts.set(
+        matchedColor.id,
+        (matchedColorCounts.get(matchedColor.id) ?? 0) + 1,
+      );
     }
+
+    const matchedColors = Array.from(matchedColorCounts.entries())
+      .map(([colorId, count]) => {
+        const matchedColor = paletteColorsById.get(colorId);
+
+        if (!matchedColor) {
+          throw new Error("This bead palette could not be applied.");
+        }
+
+        return {
+          id: matchedColor.id,
+          brand: matchedColor.brand,
+          code: matchedColor.code,
+          name: matchedColor.name,
+          hex: matchedColor.hex,
+          count,
+        };
+      })
+      .sort(
+        (leftColor, rightColor) =>
+          rightColor.count - leftColor.count ||
+          leftColor.name.localeCompare(rightColor.name),
+      );
 
     return {
       width: patternSize.width,
       height: patternSize.height,
       cells,
+      matchedColors,
+      paletteId: palette.id,
+      paletteName: `${palette.brand} ${palette.name}`,
     };
   } finally {
     decoded.close?.();
@@ -303,6 +375,11 @@ export function HomePatternMaker() {
   const [pixelError, setPixelError] = useState("");
   const [cropMode, setCropMode] = useState<CropMode>("square");
   const [maxSide, setMaxSide] = useState(32);
+  const [selectedPaletteId, setSelectedPaletteId] =
+    useState(defaultBeadPaletteId);
+
+  const selectedPalette =
+    preparedBeadPaletteMap.get(selectedPaletteId) ?? preparedBeadPalettes[0];
 
   const patternSize = getPatternSize(
     preview?.width,
@@ -350,6 +427,7 @@ export function HomePatternMaker() {
             height: patternHeight,
           },
           cropMode,
+          selectedPalette,
         );
 
         if (pixelRequestId.current === requestId) {
@@ -372,7 +450,7 @@ export function HomePatternMaker() {
     };
 
     void pixelate();
-  }, [cropMode, patternHeight, patternWidth, preview]);
+  }, [cropMode, patternHeight, patternWidth, preview, selectedPalette]);
 
   async function handleImageChange(event: ChangeEvent<HTMLInputElement>) {
     const requestId = previewRequestId.current + 1;
@@ -617,19 +695,40 @@ export function HomePatternMaker() {
         </label>
         <label className="text-sm font-medium text-[var(--foreground)]">
           Palette
-          <select className="mt-2 w-full rounded-md border border-[var(--border)] bg-white px-3 py-2 text-sm text-[var(--foreground)]">
-            {palettes.map((palette) => (
-              <option key={palette}>{palette}</option>
+          <select
+            className="mt-2 w-full rounded-md border border-[var(--border)] bg-white px-3 py-2 text-sm text-[var(--foreground)]"
+            onChange={(event) => setSelectedPaletteId(event.target.value)}
+            value={selectedPalette.id}
+          >
+            {preparedBeadPalettes.map((palette) => (
+              <option key={palette.id} value={palette.id}>
+                {palette.brand} {palette.name} ({palette.colors.length} colors)
+              </option>
             ))}
           </select>
+          <span className="mt-2 block text-xs leading-5 text-[var(--muted)]">
+            Each pixel is matched to the closest bead color using LAB color
+            distance. More brand palettes can plug into this data structure
+            later.
+          </span>
         </label>
         <label className="text-sm font-medium text-[var(--foreground)]">
           Colors
-          <select className="mt-2 w-full rounded-md border border-[var(--border)] bg-white px-3 py-2 text-sm text-[var(--foreground)]">
-            {colorCounts.map((count) => (
-              <option key={count}>{count}</option>
+          <select
+            className="mt-2 w-full rounded-md border border-[var(--border)] bg-[var(--surface-soft)] px-3 py-2 text-sm text-[var(--muted)]"
+            disabled
+            value={upcomingColorLimit}
+          >
+            {colorCountOptions.map((count) => (
+              <option key={count} value={count}>
+                {count} colors
+              </option>
             ))}
           </select>
+          <span className="mt-2 block text-xs leading-5 text-[var(--muted)]">
+            Color-limit quantization is the next step. This release focuses on
+            matching every cell to the selected bead palette.
+          </span>
         </label>
       </div>
 
@@ -638,62 +737,113 @@ export function HomePatternMaker() {
         <strong className="font-semibold text-[var(--foreground)]">
           {patternWidth} x {patternHeight} beads
         </strong>
-        . Transparent pixels are placed on a white background for this first
-        version.
+        . Transparent pixels are placed on a white background, then matched to{" "}
+        <strong className="font-semibold text-[var(--foreground)]">
+          {selectedPalette.brand} {selectedPalette.name}
+        </strong>
+        .
       </div>
 
       {preview ? (
-        <div className="mt-5 rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-[var(--foreground)]">
-                Pixel pattern preview
-              </p>
-              <p className="mt-1 text-sm leading-6 text-[var(--muted)]">
-                Each square is one bead position in the target grid.
-              </p>
+        <>
+          <div className="mt-5 rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-[var(--foreground)]">
+                  Pixel pattern preview
+                </p>
+                <p className="mt-1 text-sm leading-6 text-[var(--muted)]">
+                  Each square is one bead position in the target grid.
+                </p>
+              </div>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[var(--accent)]">
+                {pixelPattern
+                  ? `${pixelPattern.cells.length} cells`
+                  : "Preparing"}
+              </span>
             </div>
-            <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[var(--accent)]">
-              {pixelPattern
-                ? `${pixelPattern.cells.length} cells`
-                : "Preparing"}
-            </span>
-          </div>
 
-          <div aria-live="polite" className="mt-4 min-h-6" role="status">
-            {isPixelating ? (
-              <p className="text-sm font-medium text-[var(--accent)]">
-                Pixelating the selected crop...
-              </p>
-            ) : null}
-            {pixelError ? (
-              <p className="text-sm font-medium text-[var(--accent-strong)]">
-                {pixelError}
-              </p>
+            <div aria-live="polite" className="mt-4 min-h-6" role="status">
+              {isPixelating ? (
+                <p className="text-sm font-medium text-[var(--accent)]">
+                  Pixelating the selected crop and matching it to{" "}
+                  {selectedPalette.brand} {selectedPalette.name}...
+                </p>
+              ) : null}
+              {pixelError ? (
+                <p className="text-sm font-medium text-[var(--accent-strong)]">
+                  {pixelError}
+                </p>
+              ) : null}
+            </div>
+
+            {pixelPattern && !pixelError ? (
+              <div
+                aria-label={`Pixelated ${pixelPattern.width} by ${pixelPattern.height} bead pattern using ${pixelPattern.paletteName}`}
+                className="mx-auto mt-4 grid aspect-square w-full max-w-[280px] overflow-hidden rounded-md border border-[var(--border)] bg-white shadow-sm"
+                role="img"
+                style={{
+                  aspectRatio: `${pixelPattern.width} / ${pixelPattern.height}`,
+                  gridTemplateColumns: `repeat(${pixelPattern.width}, minmax(0, 1fr))`,
+                }}
+              >
+                {pixelPattern.cells.map((color, index) => (
+                  <span
+                    aria-hidden="true"
+                    className="aspect-square"
+                    key={`${color}-${index}`}
+                    style={{ backgroundColor: color }}
+                  />
+                ))}
+              </div>
             ) : null}
           </div>
 
           {pixelPattern && !pixelError ? (
-            <div
-              aria-label={`Pixelated ${pixelPattern.width} by ${pixelPattern.height} bead pattern`}
-              className="mx-auto mt-4 grid aspect-square w-full max-w-[280px] overflow-hidden rounded-md border border-[var(--border)] bg-white shadow-sm"
-              role="img"
-              style={{
-                aspectRatio: `${pixelPattern.width} / ${pixelPattern.height}`,
-                gridTemplateColumns: `repeat(${pixelPattern.width}, minmax(0, 1fr))`,
-              }}
-            >
-              {pixelPattern.cells.map((color, index) => (
-                <span
-                  aria-hidden="true"
-                  className="aspect-square"
-                  key={`${color}-${index}`}
-                  style={{ backgroundColor: color }}
-                />
-              ))}
+            <div className="mt-5 rounded-lg border border-[var(--border)] bg-white p-4 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-[var(--foreground)]">
+                    Matched bead colors
+                  </p>
+                  <p className="mt-1 text-sm leading-6 text-[var(--muted)]">
+                    {pixelPattern.paletteName} is applied as a fixed bead color
+                    card, so the preview no longer uses arbitrary RGB values.
+                  </p>
+                </div>
+                <span className="rounded-full bg-[var(--surface-soft)] px-3 py-1 text-xs font-semibold text-[var(--accent)]">
+                  {pixelPattern.matchedColors.length} colors used
+                </span>
+              </div>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {pixelPattern.matchedColors.map((color) => (
+                  <div
+                    className="flex items-center gap-3 rounded-md border border-[var(--border)] bg-[var(--surface-soft)] px-3 py-3"
+                    key={color.id}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="h-10 w-10 rounded-md border border-black/10 shadow-[inset_0_1px_2px_rgba(255,255,255,0.55)]"
+                      style={{ backgroundColor: color.hex }}
+                    />
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-semibold text-[var(--foreground)]">
+                        {color.name}
+                      </span>
+                      <span className="block text-xs leading-5 text-[var(--muted)]">
+                        {color.hex} - {color.code}
+                      </span>
+                    </span>
+                    <span className="ml-auto whitespace-nowrap text-xs font-semibold text-[var(--accent)]">
+                      {color.count} beads
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
           ) : null}
-        </div>
+        </>
       ) : null}
     </section>
   );

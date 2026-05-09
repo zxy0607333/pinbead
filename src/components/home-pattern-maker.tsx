@@ -19,6 +19,9 @@ const acceptedTypes = ["image/png", "image/jpeg", "image/webp"];
 const maxFileSize = 15 * 1024 * 1024;
 const maxInputPixels = 36_000_000;
 const previewMaxSize = 960;
+const surfaceColor = "#ffffff";
+const borderColor = "#d9e1dc";
+const exportPadding = 28;
 
 type ImagePreview = {
   name: string;
@@ -62,6 +65,14 @@ type PixelPattern = PatternSize & {
   selectedColorLimit: number;
   effectiveColorLimit: number;
   originalColorCount: number;
+};
+
+type PatternRenderOptions = {
+  pattern: PatternSize & {
+    cells: string[];
+  };
+  previewMode: PreviewMode;
+  showGridLines: boolean;
 };
 
 function getPatternSize(
@@ -139,6 +150,117 @@ function getPreviewSize(width: number, height: number) {
     width: Math.max(1, Math.round(width * scale)),
     height: Math.max(1, Math.round(height * scale)),
   };
+}
+
+function getPatternCellSize(width: number, height: number) {
+  const largestSide = Math.max(width, height);
+
+  return Math.max(14, Math.min(28, Math.floor(1400 / largestSide)));
+}
+
+function formatTimestampForFileName(date: Date) {
+  const pad = (value: number) => value.toString().padStart(2, "0");
+
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(
+    date.getDate(),
+  )}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
+}
+
+function getPatternExportFileName(
+  pattern: PatternSize,
+  previewMode: PreviewMode,
+  showGridLines: boolean,
+) {
+  const modeSegment = previewMode === "beads" ? "beads" : "pixels";
+  const gridSegment = showGridLines ? "grid" : "plain";
+
+  return `pinbead-${pattern.width}x${pattern.height}-${modeSegment}-${gridSegment}-${formatTimestampForFileName(
+    new Date(),
+  )}.png`;
+}
+
+function renderPatternToCanvas({
+  pattern,
+  previewMode,
+  showGridLines,
+}: PatternRenderOptions) {
+  const cellSize = getPatternCellSize(pattern.width, pattern.height);
+  const gridThickness = showGridLines ? Math.max(1, Math.round(cellSize * 0.08)) : 0;
+  const patternPixelWidth =
+    pattern.width * cellSize + Math.max(0, pattern.width - 1) * gridThickness;
+  const patternPixelHeight =
+    pattern.height * cellSize + Math.max(0, pattern.height - 1) * gridThickness;
+  const canvas = document.createElement("canvas");
+
+  canvas.width = patternPixelWidth + exportPadding * 2;
+  canvas.height = patternPixelHeight + exportPadding * 2;
+
+  const context = canvas.getContext("2d", {
+    alpha: false,
+    willReadFrequently: false,
+  });
+
+  if (!context) {
+    throw new Error("Your browser could not prepare the PNG export.");
+  }
+
+  context.fillStyle = showGridLines ? borderColor : surfaceColor;
+  context.fillRect(0, 0, canvas.width, canvas.height);
+
+  for (let row = 0; row < pattern.height; row += 1) {
+    for (let column = 0; column < pattern.width; column += 1) {
+      const cellIndex = row * pattern.width + column;
+      const cellColor = pattern.cells[cellIndex];
+      const cellX = exportPadding + column * (cellSize + gridThickness);
+      const cellY = exportPadding + row * (cellSize + gridThickness);
+
+      if (previewMode === "pixels") {
+        context.fillStyle = cellColor;
+        context.fillRect(cellX, cellY, cellSize, cellSize);
+        continue;
+      }
+
+      if (showGridLines) {
+        context.fillStyle = surfaceColor;
+        context.fillRect(cellX, cellY, cellSize, cellSize);
+      }
+
+      const beadRadius = cellSize * 0.42;
+      const beadCenterX = cellX + cellSize / 2;
+      const beadCenterY = cellY + cellSize / 2;
+
+      context.beginPath();
+      context.arc(beadCenterX, beadCenterY, beadRadius, 0, Math.PI * 2);
+      context.fillStyle = cellColor;
+      context.fill();
+      context.lineWidth = Math.max(1, cellSize * 0.04);
+      context.strokeStyle = "rgba(15, 17, 16, 0.12)";
+      context.stroke();
+
+      context.beginPath();
+      context.arc(
+        beadCenterX - cellSize * 0.1,
+        beadCenterY - cellSize * 0.12,
+        cellSize * 0.13,
+        0,
+        Math.PI * 2,
+      );
+      context.fillStyle = "rgba(255, 255, 255, 0.35)";
+      context.fill();
+    }
+  }
+
+  return canvas;
+}
+
+function downloadBlob(blob: Blob, fileName: string) {
+  const blobUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = blobUrl;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(blobUrl);
 }
 
 function loadImageElement(file: File): Promise<DecodedImage> {
@@ -378,7 +500,9 @@ export function HomePatternMaker() {
   const [preview, setPreview] = useState<ImagePreview | null>(null);
   const [pixelPattern, setPixelPattern] = useState<PixelPattern | null>(null);
   const [error, setError] = useState("");
+  const [exportError, setExportError] = useState("");
   const [isPreparing, setIsPreparing] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [isPixelating, setIsPixelating] = useState(false);
   const [pixelError, setPixelError] = useState("");
   const [cropMode, setCropMode] = useState<CropMode>("square");
@@ -535,6 +659,45 @@ export function HomePatternMaker() {
       if (previewRequestId.current === requestId) {
         setIsPreparing(false);
       }
+    }
+  }
+
+  async function handlePngExport() {
+    if (!pixelPattern) {
+      return;
+    }
+
+    setExportError("");
+    setIsExporting(true);
+
+    try {
+      const canvas = renderPatternToCanvas({
+        pattern: pixelPattern,
+        previewMode,
+        showGridLines,
+      });
+      const exportBlob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob((blob) => {
+          if (blob) {
+            resolve(blob);
+          } else {
+            reject(new Error("Your browser could not create the PNG export."));
+          }
+        }, "image/png");
+      });
+
+      downloadBlob(
+        exportBlob,
+        getPatternExportFileName(pixelPattern, previewMode, showGridLines),
+      );
+    } catch (pngExportError) {
+      setExportError(
+        pngExportError instanceof Error
+          ? pngExportError.message
+          : "This pattern could not be exported as PNG.",
+      );
+    } finally {
+      setIsExporting(false);
     }
   }
 
@@ -792,11 +955,21 @@ export function HomePatternMaker() {
                   without changing the pattern size.
                 </p>
               </div>
-              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[var(--accent)]">
-                {pixelPattern
-                  ? `${pixelPattern.cells.length} cells`
-                  : "Preparing"}
-              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[var(--accent)]">
+                  {pixelPattern
+                    ? `${pixelPattern.cells.length} cells`
+                    : "Preparing"}
+                </span>
+                <button
+                  className="rounded-full border border-[var(--border)] bg-white px-3 py-2 text-xs font-semibold text-[var(--foreground)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={!pixelPattern || isExporting || isPixelating}
+                  onClick={handlePngExport}
+                  type="button"
+                >
+                  {isExporting ? "Exporting PNG..." : "Download PNG"}
+                </button>
+              </div>
             </div>
 
             <div aria-live="polite" className="mt-4 min-h-6" role="status">
@@ -810,6 +983,17 @@ export function HomePatternMaker() {
               {pixelError ? (
                 <p className="text-sm font-medium text-[var(--accent-strong)]">
                   {pixelError}
+                </p>
+              ) : null}
+              {exportError ? (
+                <p className="text-sm font-medium text-[var(--accent-strong)]">
+                  {exportError}
+                </p>
+              ) : null}
+              {!isPixelating && !pixelError && !exportError && pixelPattern ? (
+                <p className="text-sm leading-6 text-[var(--muted)]">
+                  PNG export uses the active preview mode and current grid-line
+                  setting.
                 </p>
               ) : null}
             </div>

@@ -5,6 +5,7 @@ import {
   matchRgbToBeadColor,
   preparedBeadPaletteMap,
   preparedBeadPalettes,
+  reduceMatchedBeadColors,
   type PreparedBeadPalette,
   type PreparedBeadPaletteColor,
 } from "@/lib/bead-color-matching";
@@ -13,7 +14,7 @@ import type { ChangeEvent } from "react";
 
 const sizeOptions = [16, 24, 32, 48, 64];
 const colorCountOptions = [8, 16, 24, 32];
-const upcomingColorLimit = 24;
+const defaultColorLimit = 24;
 const acceptedTypes = ["image/png", "image/jpeg", "image/webp"];
 const maxFileSize = 15 * 1024 * 1024;
 const maxInputPixels = 36_000_000;
@@ -57,6 +58,9 @@ type PixelPattern = PatternSize & {
   matchedColors: MatchedPatternColor[];
   paletteId: string;
   paletteName: string;
+  selectedColorLimit: number;
+  effectiveColorLimit: number;
+  originalColorCount: number;
 };
 
 function getPatternSize(
@@ -253,6 +257,7 @@ async function createPixelPattern(
   patternSize: PatternSize,
   cropMode: CropMode,
   palette: PreparedBeadPalette,
+  maxColors: number,
 ): Promise<PixelPattern> {
   await waitForNextFrame();
 
@@ -296,9 +301,8 @@ async function createPixelPattern(
       patternSize.width,
       patternSize.height,
     );
-    const cells: string[] = [];
     const matchedColorCache = new Map<string, PreparedBeadPaletteColor>();
-    const matchedColorCounts = new Map<string, number>();
+    const matchedColorIds: string[] = [];
     const paletteColorsById = new Map(
       palette.colors.map((color) => [color.id, color]),
     );
@@ -320,21 +324,25 @@ async function createPixelPattern(
         matchedColorCache.set(sourceHex, matchedColor);
       }
 
-      cells.push(matchedColor.hex);
-      matchedColorCounts.set(
-        matchedColor.id,
-        (matchedColorCounts.get(matchedColor.id) ?? 0) + 1,
-      );
+      matchedColorIds.push(matchedColor.id);
     }
 
-    const matchedColors = Array.from(matchedColorCounts.entries())
-      .map(([colorId, count]) => {
-        const matchedColor = paletteColorsById.get(colorId);
+    const reducedPattern = reduceMatchedBeadColors(
+      matchedColorIds,
+      palette,
+      maxColors,
+    );
+    const cells = reducedPattern.colorIds.map((colorId) => {
+      const matchedColor = paletteColorsById.get(colorId);
 
-        if (!matchedColor) {
-          throw new Error("This bead palette could not be applied.");
-        }
+      if (!matchedColor) {
+        throw new Error("This bead palette could not be applied.");
+      }
 
+      return matchedColor.hex;
+    });
+    const matchedColors = reducedPattern.matchedColors.map(
+      ({ color: matchedColor, count }) => {
         return {
           id: matchedColor.id,
           brand: matchedColor.brand,
@@ -343,12 +351,8 @@ async function createPixelPattern(
           hex: matchedColor.hex,
           count,
         };
-      })
-      .sort(
-        (leftColor, rightColor) =>
-          rightColor.count - leftColor.count ||
-          leftColor.name.localeCompare(rightColor.name),
-      );
+      },
+    );
 
     return {
       width: patternSize.width,
@@ -357,6 +361,9 @@ async function createPixelPattern(
       matchedColors,
       paletteId: palette.id,
       paletteName: `${palette.brand} ${palette.name}`,
+      selectedColorLimit: maxColors,
+      effectiveColorLimit: reducedPattern.effectiveMaxColors,
+      originalColorCount: reducedPattern.originalUsedColorCount,
     };
   } finally {
     decoded.close?.();
@@ -375,6 +382,8 @@ export function HomePatternMaker() {
   const [pixelError, setPixelError] = useState("");
   const [cropMode, setCropMode] = useState<CropMode>("square");
   const [maxSide, setMaxSide] = useState(32);
+  const [selectedColorLimit, setSelectedColorLimit] =
+    useState(defaultColorLimit);
   const [selectedPaletteId, setSelectedPaletteId] =
     useState(defaultBeadPaletteId);
 
@@ -428,6 +437,7 @@ export function HomePatternMaker() {
           },
           cropMode,
           selectedPalette,
+          selectedColorLimit,
         );
 
         if (pixelRequestId.current === requestId) {
@@ -450,7 +460,14 @@ export function HomePatternMaker() {
     };
 
     void pixelate();
-  }, [cropMode, patternHeight, patternWidth, preview, selectedPalette]);
+  }, [
+    cropMode,
+    patternHeight,
+    patternWidth,
+    preview,
+    selectedColorLimit,
+    selectedPalette,
+  ]);
 
   async function handleImageChange(event: ChangeEvent<HTMLInputElement>) {
     const requestId = previewRequestId.current + 1;
@@ -715,9 +732,11 @@ export function HomePatternMaker() {
         <label className="text-sm font-medium text-[var(--foreground)]">
           Colors
           <select
-            className="mt-2 w-full rounded-md border border-[var(--border)] bg-[var(--surface-soft)] px-3 py-2 text-sm text-[var(--muted)]"
-            disabled
-            value={upcomingColorLimit}
+            className="mt-2 w-full rounded-md border border-[var(--border)] bg-white px-3 py-2 text-sm text-[var(--foreground)]"
+            onChange={(event) =>
+              setSelectedColorLimit(Number(event.target.value))
+            }
+            value={selectedColorLimit}
           >
             {colorCountOptions.map((count) => (
               <option key={count} value={count}>
@@ -726,8 +745,8 @@ export function HomePatternMaker() {
             ))}
           </select>
           <span className="mt-2 block text-xs leading-5 text-[var(--muted)]">
-            Color-limit quantization is the next step. This release focuses on
-            matching every cell to the selected bead palette.
+            Lower limits simplify the bead list for beginners. Higher limits
+            keep more detail from the original image.
           </span>
         </label>
       </div>
@@ -740,6 +759,10 @@ export function HomePatternMaker() {
         . Transparent pixels are placed on a white background, then matched to{" "}
         <strong className="font-semibold text-[var(--foreground)]">
           {selectedPalette.brand} {selectedPalette.name}
+        </strong>
+        with a target limit of{" "}
+        <strong className="font-semibold text-[var(--foreground)]">
+          {selectedColorLimit} colors
         </strong>
         .
       </div>
@@ -767,7 +790,8 @@ export function HomePatternMaker() {
               {isPixelating ? (
                 <p className="text-sm font-medium text-[var(--accent)]">
                   Pixelating the selected crop and matching it to{" "}
-                  {selectedPalette.brand} {selectedPalette.name}...
+                  {selectedPalette.brand} {selectedPalette.name}, then reducing
+                  it to up to {selectedColorLimit} colors...
                 </p>
               ) : null}
               {pixelError ? (
@@ -812,8 +836,34 @@ export function HomePatternMaker() {
                   </p>
                 </div>
                 <span className="rounded-full bg-[var(--surface-soft)] px-3 py-1 text-xs font-semibold text-[var(--accent)]">
-                  {pixelPattern.matchedColors.length} colors used
+                  {pixelPattern.matchedColors.length} /{" "}
+                  {pixelPattern.effectiveColorLimit} colors used
                 </span>
+              </div>
+
+              <div className="mt-4 rounded-md border border-[var(--border)] bg-[var(--surface-soft)] px-3 py-3 text-sm leading-6 text-[var(--muted)]">
+                {pixelPattern.originalColorCount >
+                pixelPattern.matchedColors.length ? (
+                  <>
+                    Reduced this crop from{" "}
+                    <strong className="font-semibold text-[var(--foreground)]">
+                      {pixelPattern.originalColorCount}
+                    </strong>{" "}
+                    matched bead colors down to{" "}
+                    <strong className="font-semibold text-[var(--foreground)]">
+                      {pixelPattern.matchedColors.length}
+                    </strong>{" "}
+                    to fit your current color limit.
+                  </>
+                ) : (
+                  <>
+                    This crop already fits within the selected{" "}
+                    <strong className="font-semibold text-[var(--foreground)]">
+                      {pixelPattern.selectedColorLimit}-color
+                    </strong>{" "}
+                    limit, so no extra reduction was needed.
+                  </>
+                )}
               </div>
 
               <div className="mt-4 grid gap-3 sm:grid-cols-2">

@@ -20,6 +20,18 @@ export type PreparedBeadPalette = Omit<BeadPalette, "colors"> & {
   colors: PreparedBeadPaletteColor[];
 };
 
+export type MatchedBeadColorCount = {
+  color: PreparedBeadPaletteColor;
+  count: number;
+};
+
+export type ReducedBeadColorPattern = {
+  colorIds: string[];
+  matchedColors: MatchedBeadColorCount[];
+  effectiveMaxColors: number;
+  originalUsedColorCount: number;
+};
+
 function normalizeHex(hex: string) {
   return hex.replace("#", "");
 }
@@ -136,6 +148,102 @@ export const preparedBeadPaletteMap = new Map(
   preparedBeadPalettes.map((palette) => [palette.id, palette]),
 );
 
+function getPaletteColorMap(palette: PreparedBeadPalette) {
+  return new Map(palette.colors.map((color) => [color.id, color]));
+}
+
+function summarizeMatchedBeadColorIds(
+  colorIds: string[],
+  palette: PreparedBeadPalette,
+) {
+  const paletteColorMap = getPaletteColorMap(palette);
+  const matchedColorCounts = new Map<string, number>();
+
+  for (const colorId of colorIds) {
+    matchedColorCounts.set(colorId, (matchedColorCounts.get(colorId) ?? 0) + 1);
+  }
+
+  return Array.from(matchedColorCounts.entries())
+    .map(([colorId, count]) => {
+      const matchedColor = paletteColorMap.get(colorId);
+
+      if (!matchedColor) {
+        throw new Error("This bead palette could not be applied.");
+      }
+
+      return {
+        color: matchedColor,
+        count,
+      };
+    })
+    .sort(
+      (leftColor, rightColor) =>
+        rightColor.count - leftColor.count ||
+        leftColor.color.name.localeCompare(rightColor.color.name),
+    );
+}
+
+function getClosestPaletteColor(
+  sourceColor: PreparedBeadPaletteColor,
+  candidateColors: PreparedBeadPaletteColor[],
+) {
+  let closestColor = candidateColors[0];
+  let closestDistance = Number.POSITIVE_INFINITY;
+
+  for (const candidateColor of candidateColors) {
+    const colorDistance = getLabDistance(sourceColor.lab, candidateColor.lab);
+
+    if (colorDistance < closestDistance) {
+      closestColor = candidateColor;
+      closestDistance = colorDistance;
+    }
+  }
+
+  return closestColor;
+}
+
+function selectRepresentativeColors(
+  usedColors: MatchedBeadColorCount[],
+  effectiveMaxColors: number,
+) {
+  if (usedColors.length <= effectiveMaxColors) {
+    return usedColors.map((entry) => entry.color);
+  }
+
+  const selectedColors = [usedColors[0].color];
+
+  while (selectedColors.length < effectiveMaxColors) {
+    let nextColor: PreparedBeadPaletteColor | null = null;
+    let bestScore = Number.NEGATIVE_INFINITY;
+
+    for (const usedColor of usedColors) {
+      if (selectedColors.some((color) => color.id === usedColor.color.id)) {
+        continue;
+      }
+
+      const nearestSelectedDistance = Math.min(
+        ...selectedColors.map((selectedColor) =>
+          getLabDistance(usedColor.color.lab, selectedColor.lab),
+        ),
+      );
+      const candidateScore = nearestSelectedDistance * usedColor.count;
+
+      if (candidateScore > bestScore) {
+        nextColor = usedColor.color;
+        bestScore = candidateScore;
+      }
+    }
+
+    if (!nextColor) {
+      break;
+    }
+
+    selectedColors.push(nextColor);
+  }
+
+  return selectedColors;
+}
+
 export function matchRgbToBeadColor(
   red: number,
   green: number,
@@ -158,5 +266,58 @@ export function matchRgbToBeadColor(
   return {
     color: closestColor,
     distance: closestDistance,
+  };
+}
+
+export function reduceMatchedBeadColors(
+  colorIds: string[],
+  palette: PreparedBeadPalette,
+  maxColors: number,
+): ReducedBeadColorPattern {
+  const effectiveMaxColors = Math.max(
+    1,
+    Math.min(maxColors, palette.colors.length),
+  );
+  const originalMatchedColors = summarizeMatchedBeadColorIds(colorIds, palette);
+
+  if (originalMatchedColors.length <= effectiveMaxColors) {
+    return {
+      colorIds,
+      matchedColors: originalMatchedColors,
+      effectiveMaxColors,
+      originalUsedColorCount: originalMatchedColors.length,
+    };
+  }
+
+  const representativeColors = selectRepresentativeColors(
+    originalMatchedColors,
+    effectiveMaxColors,
+  );
+  const representativeColorIds = new Set(
+    representativeColors.map((color) => color.id),
+  );
+  const reducedColorMap = new Map<string, string>();
+
+  for (const matchedColor of originalMatchedColors) {
+    if (representativeColorIds.has(matchedColor.color.id)) {
+      reducedColorMap.set(matchedColor.color.id, matchedColor.color.id);
+      continue;
+    }
+
+    reducedColorMap.set(
+      matchedColor.color.id,
+      getClosestPaletteColor(matchedColor.color, representativeColors).id,
+    );
+  }
+
+  const reducedColorIds = colorIds.map(
+    (colorId) => reducedColorMap.get(colorId) ?? colorId,
+  );
+
+  return {
+    colorIds: reducedColorIds,
+    matchedColors: summarizeMatchedBeadColorIds(reducedColorIds, palette),
+    effectiveMaxColors,
+    originalUsedColorCount: originalMatchedColors.length,
   };
 }

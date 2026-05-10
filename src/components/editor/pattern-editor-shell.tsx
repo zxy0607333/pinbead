@@ -1,12 +1,36 @@
 "use client";
 
-import { beadPalettes, defaultBeadPaletteId } from "@/data/bead-palettes";
+import {
+  beadPalettes,
+  defaultBeadPaletteId,
+  type BeadPalette,
+  type BeadPaletteColor,
+} from "@/data/bead-palettes";
 import { useState } from "react";
 
 const canvasSizes = [16, 24, 32, 50];
 const tools = ["Brush", "Eraser", "Fill"] as const;
+const exportPaperColor = "#ffffff";
+const exportSurfaceColor = "#f8fafc";
+const exportSoftSurfaceColor = "#eef2f7";
+const exportBorderColor = "#d6dde8";
+const exportTextColor = "#111827";
+const exportMutedTextColor = "#64748b";
 
 type EditorTool = (typeof tools)[number];
+type PatternColorStat = {
+  color: BeadPaletteColor;
+  count: number;
+};
+type EditorPatternExportOptions = {
+  cells: Array<string | null>;
+  canvasSize: number;
+  colorStats: PatternColorStat[];
+  palette: BeadPalette;
+  showColorCodes: boolean;
+  showCoordinates: boolean;
+  showGridLines: boolean;
+};
 type ViewToggleButtonProps = {
   isActive: boolean;
   label: string;
@@ -161,6 +185,302 @@ function ViewToggleButton({ isActive, label, onClick }: ViewToggleButtonProps) {
   );
 }
 
+function formatTimestampForFileName(date: Date) {
+  const pad = (value: number) => value.toString().padStart(2, "0");
+
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(
+    date.getDate(),
+  )}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
+}
+
+function getEditorPatternExportFileName(canvasSize: number) {
+  return `pinbead-${canvasSize}x${canvasSize}-${formatTimestampForFileName(
+    new Date(),
+  )}.png`;
+}
+
+function getExportCellSize(size: number, showColorCodes: boolean) {
+  if (size >= 50) {
+    return showColorCodes ? 26 : 22;
+  }
+
+  if (size >= 32) {
+    return showColorCodes ? 30 : 26;
+  }
+
+  if (size >= 24) {
+    return showColorCodes ? 36 : 30;
+  }
+
+  return showColorCodes ? 42 : 34;
+}
+
+function drawTextWithinWidth(
+  context: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+) {
+  if (context.measureText(text).width <= maxWidth) {
+    context.fillText(text, x, y);
+    return;
+  }
+
+  let truncatedText = text;
+
+  while (
+    truncatedText.length > 0 &&
+    context.measureText(`${truncatedText}...`).width > maxWidth
+  ) {
+    truncatedText = truncatedText.slice(0, -1);
+  }
+
+  context.fillText(`${truncatedText}...`, x, y);
+}
+
+function renderEditorPatternToCanvas({
+  cells,
+  canvasSize,
+  colorStats,
+  palette,
+  showColorCodes,
+  showCoordinates,
+  showGridLines,
+}: EditorPatternExportOptions) {
+  const colorMap = new Map(palette.colors.map((color) => [color.id, color]));
+  const cellSize = getExportCellSize(canvasSize, showColorCodes);
+  const coordinateSize = showCoordinates ? 36 : 0;
+  const padding = 48;
+  const headerHeight = 88;
+  const gridSize = canvasSize * cellSize;
+  const boardWidth = gridSize + coordinateSize * 2;
+  const boardHeight = gridSize + coordinateSize * 2;
+  const legendColumns = boardWidth >= 780 ? 2 : 1;
+  const legendRows = Math.max(1, Math.ceil(colorStats.length / legendColumns));
+  const legendHeaderHeight = 46;
+  const legendRowHeight = 46;
+  const legendHeight = legendHeaderHeight + legendRows * legendRowHeight;
+  const canvasWidth = Math.max(880, boardWidth + padding * 2);
+  const canvasHeight = padding + headerHeight + boardHeight + 32 + legendHeight + padding;
+  const boardX = Math.round((canvasWidth - boardWidth) / 2);
+  const boardY = padding + headerHeight;
+  const patternX = boardX + coordinateSize;
+  const patternY = boardY + coordinateSize;
+  const canvas = document.createElement("canvas");
+
+  canvas.width = canvasWidth;
+  canvas.height = canvasHeight;
+
+  const context = canvas.getContext("2d", {
+    alpha: false,
+    willReadFrequently: false,
+  });
+
+  if (!context) {
+    throw new Error("Your browser could not prepare the PNG export.");
+  }
+
+  const totalBeads = colorStats.reduce((total, stat) => total + stat.count, 0);
+
+  context.fillStyle = exportPaperColor;
+  context.fillRect(0, 0, canvas.width, canvas.height);
+
+  context.fillStyle = exportTextColor;
+  context.font = "700 30px Arial, sans-serif";
+  context.textAlign = "left";
+  context.textBaseline = "alphabetic";
+  context.fillText("Pinbead Pattern", padding, padding + 8);
+
+  context.fillStyle = exportMutedTextColor;
+  context.font = "16px Arial, sans-serif";
+  context.fillText(
+    `${canvasSize} x ${canvasSize} grid | ${totalBeads} beads | ${colorStats.length} colors`,
+    padding,
+    padding + 38,
+  );
+
+  context.textAlign = "right";
+  context.fillText(
+    `Palette: ${palette.brand} ${palette.name}`,
+    canvasWidth - padding,
+    padding + 38,
+  );
+
+  context.fillStyle = exportSurfaceColor;
+  context.fillRect(boardX, boardY, boardWidth, boardHeight);
+
+  if (showCoordinates) {
+    context.fillStyle = exportSoftSurfaceColor;
+    context.fillRect(patternX, boardY, gridSize, coordinateSize);
+    context.fillRect(patternX, patternY + gridSize, gridSize, coordinateSize);
+    context.fillRect(boardX, patternY, coordinateSize, gridSize);
+    context.fillRect(patternX + gridSize, patternY, coordinateSize, gridSize);
+
+    context.fillStyle = exportMutedTextColor;
+    context.font = "700 14px Arial, sans-serif";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+
+    for (let coordinate = 1; coordinate <= canvasSize; coordinate += 1) {
+      const offset = (coordinate - 1) * cellSize + cellSize / 2;
+
+      context.fillText(String(coordinate), patternX + offset, boardY + coordinateSize / 2);
+      context.fillText(
+        String(coordinate),
+        patternX + offset,
+        patternY + gridSize + coordinateSize / 2,
+      );
+      context.fillText(String(coordinate), boardX + coordinateSize / 2, patternY + offset);
+      context.fillText(
+        String(coordinate),
+        patternX + gridSize + coordinateSize / 2,
+        patternY + offset,
+      );
+    }
+  }
+
+  for (let row = 0; row < canvasSize; row += 1) {
+    for (let column = 0; column < canvasSize; column += 1) {
+      const cellIndex = row * canvasSize + column;
+      const colorId = cells[cellIndex];
+      const color = colorId ? colorMap.get(colorId) : null;
+      const x = patternX + column * cellSize;
+      const y = patternY + row * cellSize;
+
+      context.fillStyle = color?.hex ?? exportPaperColor;
+      context.fillRect(x, y, cellSize, cellSize);
+
+      if (color && showColorCodes) {
+        context.fillStyle = getReadableTextColor(color.hex);
+        context.font = `700 ${Math.max(8, Math.floor(cellSize * 0.34))}px Arial, sans-serif`;
+        context.textAlign = "center";
+        context.textBaseline = "middle";
+        context.fillText(color.code, x + cellSize / 2, y + cellSize / 2);
+      }
+    }
+  }
+
+  if (showGridLines) {
+    context.strokeStyle = exportBorderColor;
+    context.lineWidth = 1;
+
+    for (let line = 0; line <= canvasSize; line += 1) {
+      const offset = patternX + line * cellSize + 0.5;
+
+      context.beginPath();
+      context.moveTo(offset, patternY);
+      context.lineTo(offset, patternY + gridSize);
+      context.stroke();
+    }
+
+    for (let line = 0; line <= canvasSize; line += 1) {
+      const offset = patternY + line * cellSize + 0.5;
+
+      context.beginPath();
+      context.moveTo(patternX, offset);
+      context.lineTo(patternX + gridSize, offset);
+      context.stroke();
+    }
+  }
+
+  context.strokeStyle = exportBorderColor;
+  context.lineWidth = 2;
+  context.strokeRect(boardX + 1, boardY + 1, boardWidth - 2, boardHeight - 2);
+
+  const legendX = boardX;
+  const legendY = boardY + boardHeight + 32;
+  const legendWidth = boardWidth;
+  const legendColumnGap = 24;
+  const legendColumnWidth =
+    (legendWidth - legendColumnGap * (legendColumns - 1)) / legendColumns;
+
+  context.fillStyle = exportTextColor;
+  context.font = "700 20px Arial, sans-serif";
+  context.textAlign = "left";
+  context.textBaseline = "alphabetic";
+  context.fillText("Bead color list", legendX, legendY + 20);
+
+  context.fillStyle = exportMutedTextColor;
+  context.font = "14px Arial, sans-serif";
+  context.textAlign = "right";
+  context.fillText(`${totalBeads} total beads`, legendX + legendWidth, legendY + 20);
+
+  if (colorStats.length === 0) {
+    context.fillStyle = exportMutedTextColor;
+    context.font = "15px Arial, sans-serif";
+    context.textAlign = "left";
+    context.fillText("No beads placed yet.", legendX, legendY + legendHeaderHeight + 24);
+
+    return canvas;
+  }
+
+  colorStats.forEach((stat, index) => {
+    const columnIndex = index % legendColumns;
+    const rowIndex = Math.floor(index / legendColumns);
+    const x = legendX + columnIndex * (legendColumnWidth + legendColumnGap);
+    const y = legendY + legendHeaderHeight + rowIndex * legendRowHeight;
+    const swatchSize = 26;
+
+    context.fillStyle = exportPaperColor;
+    context.fillRect(x, y, legendColumnWidth, legendRowHeight - 8);
+    context.strokeStyle = exportBorderColor;
+    context.lineWidth = 1;
+    context.strokeRect(x + 0.5, y + 0.5, legendColumnWidth - 1, legendRowHeight - 9);
+
+    context.fillStyle = stat.color.hex;
+    context.fillRect(x + 10, y + 8, swatchSize, swatchSize);
+    context.strokeStyle = "rgba(15, 17, 16, 0.18)";
+    context.strokeRect(x + 10.5, y + 8.5, swatchSize - 1, swatchSize - 1);
+
+    context.textAlign = "left";
+    context.textBaseline = "alphabetic";
+    context.fillStyle = exportTextColor;
+    context.font = "700 14px Arial, sans-serif";
+    drawTextWithinWidth(
+      context,
+      `${stat.color.code} ${stat.color.name}`,
+      x + 46,
+      y + 20,
+      legendColumnWidth - 112,
+    );
+
+    context.fillStyle = exportMutedTextColor;
+    context.font = "12px Arial, sans-serif";
+    context.fillText(stat.color.hex, x + 46, y + 36);
+
+    context.textAlign = "right";
+    context.fillStyle = exportTextColor;
+    context.font = "700 14px Arial, sans-serif";
+    context.fillText(String(stat.count), x + legendColumnWidth - 10, y + 26);
+  });
+
+  return canvas;
+}
+
+function createPngBlob(canvas: HTMLCanvasElement) {
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error("Your browser could not create the PNG export."));
+        return;
+      }
+
+      resolve(blob);
+    }, "image/png");
+  });
+}
+
+function downloadBlob(blob: Blob, fileName: string) {
+  const blobUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = blobUrl;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(blobUrl);
+}
+
 export function PatternEditorShell() {
   const palette = getDefaultPalette();
   const [canvasSize, setCanvasSize] = useState(24);
@@ -172,6 +492,8 @@ export function PatternEditorShell() {
     palette.colors[0]?.id ?? "",
   );
   const [isDrawing, setIsDrawing] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
   const [showGridLines, setShowGridLines] = useState(true);
   const [showCoordinates, setShowCoordinates] = useState(true);
   const [showColorCodes, setShowColorCodes] = useState(true);
@@ -285,6 +607,34 @@ export function PatternEditorShell() {
 
   function stopDrawing() {
     setIsDrawing(false);
+  }
+
+  async function handleDownloadPng() {
+    setIsExporting(true);
+    setExportError("");
+
+    try {
+      const canvas = renderEditorPatternToCanvas({
+        cells,
+        canvasSize,
+        colorStats,
+        palette,
+        showColorCodes,
+        showCoordinates,
+        showGridLines,
+      });
+      const pngBlob = await createPngBlob(canvas);
+
+      downloadBlob(pngBlob, getEditorPatternExportFileName(canvasSize));
+    } catch (pngExportError) {
+      setExportError(
+        pngExportError instanceof Error
+          ? pngExportError.message
+          : "This pattern could not be exported as PNG.",
+      );
+    } finally {
+      setIsExporting(false);
+    }
   }
 
   const gridBackground = showGridLines ? "var(--border)" : "transparent";
@@ -457,6 +807,29 @@ export function PatternEditorShell() {
               onClick={() => setShowColorCodes((current) => !current)}
             />
           </div>
+        </section>
+
+        <section className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
+          <p className="text-sm font-semibold text-[var(--foreground)]">
+            Export
+          </p>
+          <button
+            className="mt-3 w-full rounded-md border border-[var(--accent)] bg-[var(--accent)] px-3 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={isExporting}
+            onClick={handleDownloadPng}
+            type="button"
+          >
+            {isExporting ? "Exporting PNG..." : "Download PNG"}
+          </button>
+          <p className="mt-3 text-xs leading-5 text-[var(--muted)]">
+            PNG uses the current grid, coordinate, and color code settings, plus
+            the bead color list.
+          </p>
+          {exportError ? (
+            <p className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs leading-5 text-red-700">
+              {exportError}
+            </p>
+          ) : null}
         </section>
       </aside>
 

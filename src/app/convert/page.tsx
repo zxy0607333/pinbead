@@ -1,4 +1,4 @@
-import { HomePatternMaker } from "@/components/home-pattern-maker";
+import { ImagePatternConverter } from "@/components/convert/image-pattern-converter";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -37,9 +37,8 @@ export default function ConvertPage() {
           </p>
         </section>
 
-        <HomePatternMaker />
+        <ImagePatternConverter />
       </div>
     </main>
   );
 }
-

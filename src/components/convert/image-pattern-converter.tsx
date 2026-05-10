@@ -2,525 +2,50 @@
 
 import { defaultBeadPaletteId } from "@/data/bead-palettes";
 import {
-  matchRgbToBeadColor,
   preparedBeadPaletteMap,
   preparedBeadPalettes,
-  reduceMatchedBeadColors,
-  type PreparedBeadPalette,
-  type PreparedBeadPaletteColor,
 } from "@/lib/bead-color-matching";
 import {
-  createPattern,
-  type PinbeadPattern,
-} from "@/lib/pattern/pattern-model";
+  acceptedImageTypes,
+  createImageDraftPattern,
+  createImagePreview,
+  getPatternSize,
+  maxImageFileSize,
+  waitForNextFrame,
+  type ImageCropMode,
+  type ImageDraftPattern,
+  type ImagePreview,
+} from "@/lib/pattern/image-to-pattern";
+import {
+  createPngBlob,
+  downloadBlob,
+  getConvertedPatternExportFileName,
+  renderConvertedPatternPreviewToCanvas,
+  type ConvertedPatternPreviewMode,
+} from "@/lib/pattern/pattern-export";
 import { useEffect, useId, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 
 const sizeOptions = [16, 24, 32, 48, 64];
 const colorCountOptions = [8, 16, 24, 32];
 const defaultColorLimit = 24;
-const acceptedTypes = ["image/png", "image/jpeg", "image/webp"];
-const maxFileSize = 15 * 1024 * 1024;
-const maxInputPixels = 36_000_000;
-const previewMaxSize = 960;
-const surfaceColor = "#ffffff";
-const borderColor = "#d9e1dc";
-const exportPadding = 28;
 
-type ImagePreview = {
-  name: string;
-  url: string;
-  width: number;
-  height: number;
-  previewWidth: number;
-  previewHeight: number;
-  size: string;
-};
-
-type DecodedImage = {
-  image: CanvasImageSource;
-  width: number;
-  height: number;
-  close?: () => void;
-};
-
-type CropMode = "square" | "original";
-type PreviewMode = "pixels" | "beads";
-
-type PatternSize = {
-  width: number;
-  height: number;
-};
-
-type MatchedPatternColor = {
-  id: string;
-  brand: string;
-  code: string;
-  name: string;
-  hex: string;
-  count: number;
-};
-
-type PixelPattern = PatternSize & {
-  cells: string[];
-  matchedColors: MatchedPatternColor[];
-  paletteId: string;
-  paletteName: string;
-  pattern: PinbeadPattern;
-  selectedColorLimit: number;
-  effectiveColorLimit: number;
-  originalColorCount: number;
-};
-
-type PatternRenderOptions = {
-  pattern: PatternSize & {
-    cells: string[];
-  };
-  previewMode: PreviewMode;
-  showGridLines: boolean;
-};
-
-function getPatternSize(
-  sourceWidth: number | undefined,
-  sourceHeight: number | undefined,
-  maxSide: number,
-  cropMode: CropMode,
-) {
-  if (cropMode === "square" || !sourceWidth || !sourceHeight) {
-    return {
-      width: maxSide,
-      height: maxSide,
-    };
-  }
-
-  if (sourceWidth >= sourceHeight) {
-    return {
-      width: maxSide,
-      height: Math.max(1, Math.round((sourceHeight / sourceWidth) * maxSide)),
-    };
-  }
-
-  return {
-    width: Math.max(1, Math.round((sourceWidth / sourceHeight) * maxSide)),
-    height: maxSide,
-  };
-}
-
-function getCropSourceRect(
-  sourceWidth: number,
-  sourceHeight: number,
-  cropMode: CropMode,
-) {
-  if (cropMode === "original") {
-    return {
-      sx: 0,
-      sy: 0,
-      sw: sourceWidth,
-      sh: sourceHeight,
-    };
-  }
-
-  const size = Math.min(sourceWidth, sourceHeight);
-
-  return {
-    sx: Math.round((sourceWidth - size) / 2),
-    sy: Math.round((sourceHeight - size) / 2),
-    sw: size,
-    sh: size,
-  };
-}
-
-function componentToHex(value: number) {
-  return value.toString(16).padStart(2, "0");
-}
-
-function rgbToHex(red: number, green: number, blue: number) {
-  return `#${componentToHex(red)}${componentToHex(green)}${componentToHex(
-    blue,
-  )}`;
-}
-
-function formatBytes(bytes: number) {
-  if (bytes < 1024 * 1024) {
-    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-  }
-
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function getPreviewSize(width: number, height: number) {
-  const scale = Math.min(1, previewMaxSize / Math.max(width, height));
-
-  return {
-    width: Math.max(1, Math.round(width * scale)),
-    height: Math.max(1, Math.round(height * scale)),
-  };
-}
-
-function getPatternCellSize(width: number, height: number) {
-  const largestSide = Math.max(width, height);
-
-  return Math.max(14, Math.min(28, Math.floor(1400 / largestSide)));
-}
-
-function formatTimestampForFileName(date: Date) {
-  const pad = (value: number) => value.toString().padStart(2, "0");
-
-  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(
-    date.getDate(),
-  )}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
-}
-
-function getPatternExportFileName(
-  pattern: PatternSize,
-  previewMode: PreviewMode,
-  showGridLines: boolean,
-) {
-  const modeSegment = previewMode === "beads" ? "beads" : "pixels";
-  const gridSegment = showGridLines ? "grid" : "plain";
-
-  return `pinbead-${pattern.width}x${pattern.height}-${modeSegment}-${gridSegment}-${formatTimestampForFileName(
-    new Date(),
-  )}.png`;
-}
-
-function renderPatternToCanvas({
-  pattern,
-  previewMode,
-  showGridLines,
-}: PatternRenderOptions) {
-  const cellSize = getPatternCellSize(pattern.width, pattern.height);
-  const gridThickness = showGridLines ? Math.max(1, Math.round(cellSize * 0.08)) : 0;
-  const patternPixelWidth =
-    pattern.width * cellSize + Math.max(0, pattern.width - 1) * gridThickness;
-  const patternPixelHeight =
-    pattern.height * cellSize + Math.max(0, pattern.height - 1) * gridThickness;
-  const canvas = document.createElement("canvas");
-
-  canvas.width = patternPixelWidth + exportPadding * 2;
-  canvas.height = patternPixelHeight + exportPadding * 2;
-
-  const context = canvas.getContext("2d", {
-    alpha: false,
-    willReadFrequently: false,
-  });
-
-  if (!context) {
-    throw new Error("Your browser could not prepare the PNG export.");
-  }
-
-  context.fillStyle = showGridLines ? borderColor : surfaceColor;
-  context.fillRect(0, 0, canvas.width, canvas.height);
-
-  for (let row = 0; row < pattern.height; row += 1) {
-    for (let column = 0; column < pattern.width; column += 1) {
-      const cellIndex = row * pattern.width + column;
-      const cellColor = pattern.cells[cellIndex];
-      const cellX = exportPadding + column * (cellSize + gridThickness);
-      const cellY = exportPadding + row * (cellSize + gridThickness);
-
-      if (previewMode === "pixels") {
-        context.fillStyle = cellColor;
-        context.fillRect(cellX, cellY, cellSize, cellSize);
-        continue;
-      }
-
-      if (showGridLines) {
-        context.fillStyle = surfaceColor;
-        context.fillRect(cellX, cellY, cellSize, cellSize);
-      }
-
-      const beadRadius = cellSize * 0.42;
-      const beadCenterX = cellX + cellSize / 2;
-      const beadCenterY = cellY + cellSize / 2;
-
-      context.beginPath();
-      context.arc(beadCenterX, beadCenterY, beadRadius, 0, Math.PI * 2);
-      context.fillStyle = cellColor;
-      context.fill();
-      context.lineWidth = Math.max(1, cellSize * 0.04);
-      context.strokeStyle = "rgba(15, 17, 16, 0.12)";
-      context.stroke();
-
-      context.beginPath();
-      context.arc(
-        beadCenterX - cellSize * 0.1,
-        beadCenterY - cellSize * 0.12,
-        cellSize * 0.13,
-        0,
-        Math.PI * 2,
-      );
-      context.fillStyle = "rgba(255, 255, 255, 0.35)";
-      context.fill();
-    }
-  }
-
-  return canvas;
-}
-
-function downloadBlob(blob: Blob, fileName: string) {
-  const blobUrl = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-
-  link.href = blobUrl;
-  link.download = fileName;
-  link.click();
-  URL.revokeObjectURL(blobUrl);
-}
-
-function loadImageElement(file: File): Promise<DecodedImage> {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const image = new Image();
-
-    image.onload = () => {
-      URL.revokeObjectURL(url);
-      resolve({
-        image,
-        width: image.naturalWidth,
-        height: image.naturalHeight,
-      });
-    };
-    image.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error("This image could not be read. Try another file."));
-    };
-    image.src = url;
-  });
-}
-
-async function decodeImage(file: File): Promise<DecodedImage> {
-  if ("createImageBitmap" in window) {
-    const bitmap = await createImageBitmap(file);
-
-    return {
-      image: bitmap,
-      width: bitmap.width,
-      height: bitmap.height,
-      close: () => bitmap.close(),
-    };
-  }
-
-  return loadImageElement(file);
-}
-
-function loadImageUrl(url: string): Promise<DecodedImage> {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-
-    image.onload = () => {
-      resolve({
-        image,
-        width: image.naturalWidth,
-        height: image.naturalHeight,
-      });
-    };
-    image.onerror = () => {
-      reject(new Error("This image could not be pixelated."));
-    };
-    image.src = url;
-  });
-}
-
-function waitForNextFrame() {
-  return new Promise<void>((resolve) => {
-    requestAnimationFrame(() => resolve());
-  });
-}
-
-async function createPreview(file: File): Promise<ImagePreview> {
-  const decoded = await decodeImage(file);
-
-  try {
-    if (decoded.width * decoded.height > maxInputPixels) {
-      throw new Error(
-        "This image is very large. Please choose an image under 36 megapixels.",
-      );
-    }
-
-    const previewSize = getPreviewSize(decoded.width, decoded.height);
-    const canvas = document.createElement("canvas");
-    canvas.width = previewSize.width;
-    canvas.height = previewSize.height;
-
-    const context = canvas.getContext("2d", {
-      alpha: true,
-      willReadFrequently: false,
-    });
-
-    if (!context) {
-      throw new Error("Your browser could not prepare the image preview.");
-    }
-
-    context.imageSmoothingEnabled = true;
-    context.imageSmoothingQuality = "high";
-    context.drawImage(decoded.image, 0, 0, previewSize.width, previewSize.height);
-
-    const blob = await new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob((previewBlob) => {
-        if (previewBlob) {
-          resolve(previewBlob);
-        } else {
-          reject(new Error("Your browser could not create the image preview."));
-        }
-      }, "image/png");
-    });
-
-    return {
-      name: file.name,
-      url: URL.createObjectURL(blob),
-      width: decoded.width,
-      height: decoded.height,
-      previewWidth: previewSize.width,
-      previewHeight: previewSize.height,
-      size: formatBytes(file.size),
-    };
-  } finally {
-    decoded.close?.();
-  }
-}
-
-async function createPixelPattern(
-  imageUrl: string,
-  patternSize: PatternSize,
-  cropMode: CropMode,
-  palette: PreparedBeadPalette,
-  maxColors: number,
-): Promise<PixelPattern> {
-  await waitForNextFrame();
-
-  const decoded = await loadImageUrl(imageUrl);
-
-  try {
-    const canvas = document.createElement("canvas");
-    canvas.width = patternSize.width;
-    canvas.height = patternSize.height;
-
-    const context = canvas.getContext("2d", {
-      alpha: false,
-      willReadFrequently: true,
-    });
-
-    if (!context) {
-      throw new Error("Your browser could not prepare the pixel pattern.");
-    }
-
-    const source = getCropSourceRect(decoded.width, decoded.height, cropMode);
-
-    context.fillStyle = "#ffffff";
-    context.fillRect(0, 0, patternSize.width, patternSize.height);
-    context.imageSmoothingEnabled = true;
-    context.imageSmoothingQuality = "high";
-    context.drawImage(
-      decoded.image,
-      source.sx,
-      source.sy,
-      source.sw,
-      source.sh,
-      0,
-      0,
-      patternSize.width,
-      patternSize.height,
-    );
-
-    const { data } = context.getImageData(
-      0,
-      0,
-      patternSize.width,
-      patternSize.height,
-    );
-    const matchedColorCache = new Map<string, PreparedBeadPaletteColor>();
-    const matchedColorIds: string[] = [];
-    const paletteColorsById = new Map(
-      palette.colors.map((color) => [color.id, color]),
-    );
-
-    for (let index = 0; index < data.length; index += 4) {
-      const sourceRed = data[index];
-      const sourceGreen = data[index + 1];
-      const sourceBlue = data[index + 2];
-      const sourceHex = rgbToHex(sourceRed, sourceGreen, sourceBlue);
-      let matchedColor = matchedColorCache.get(sourceHex);
-
-      if (!matchedColor) {
-        matchedColor = matchRgbToBeadColor(
-          sourceRed,
-          sourceGreen,
-          sourceBlue,
-          palette,
-        ).color;
-        matchedColorCache.set(sourceHex, matchedColor);
-      }
-
-      matchedColorIds.push(matchedColor.id);
-    }
-
-    const reducedPattern = reduceMatchedBeadColors(
-      matchedColorIds,
-      palette,
-      maxColors,
-    );
-    const pattern = createPattern({
-      width: patternSize.width,
-      height: patternSize.height,
-      paletteId: palette.id,
-      source: "image-draft",
-      title: "Image draft",
-      cells: reducedPattern.colorIds,
-    });
-    const cells = reducedPattern.colorIds.map((colorId) => {
-      const matchedColor = paletteColorsById.get(colorId);
-
-      if (!matchedColor) {
-        throw new Error("This bead palette could not be applied.");
-      }
-
-      return matchedColor.hex;
-    });
-    const matchedColors = reducedPattern.matchedColors.map(
-      ({ color: matchedColor, count }) => {
-        return {
-          id: matchedColor.id,
-          brand: matchedColor.brand,
-          code: matchedColor.code,
-          name: matchedColor.name,
-          hex: matchedColor.hex,
-          count,
-        };
-      },
-    );
-
-    return {
-      width: patternSize.width,
-      height: patternSize.height,
-      cells,
-      matchedColors,
-      paletteId: palette.id,
-      paletteName: `${palette.brand} ${palette.name}`,
-      pattern,
-      selectedColorLimit: maxColors,
-      effectiveColorLimit: reducedPattern.effectiveMaxColors,
-      originalColorCount: reducedPattern.originalUsedColorCount,
-    };
-  } finally {
-    decoded.close?.();
-  }
-}
-
-export function HomePatternMaker() {
+export function ImagePatternConverter() {
   const fileInputId = useId();
   const previewRequestId = useRef(0);
   const pixelRequestId = useRef(0);
   const [preview, setPreview] = useState<ImagePreview | null>(null);
-  const [pixelPattern, setPixelPattern] = useState<PixelPattern | null>(null);
+  const [pixelPattern, setPixelPattern] =
+    useState<ImageDraftPattern | null>(null);
   const [error, setError] = useState("");
   const [exportError, setExportError] = useState("");
   const [isPreparing, setIsPreparing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isPixelating, setIsPixelating] = useState(false);
   const [pixelError, setPixelError] = useState("");
-  const [cropMode, setCropMode] = useState<CropMode>("square");
-  const [previewMode, setPreviewMode] = useState<PreviewMode>("pixels");
+  const [cropMode, setCropMode] = useState<ImageCropMode>("square");
+  const [previewMode, setPreviewMode] =
+    useState<ConvertedPatternPreviewMode>("pixels");
   const [showGridLines, setShowGridLines] = useState(true);
   const [maxSide, setMaxSide] = useState(32);
   const [selectedColorLimit, setSelectedColorLimit] =
@@ -579,7 +104,7 @@ export function HomePatternMaker() {
       }
 
       try {
-        const nextPattern = await createPixelPattern(
+        const nextPattern = await createImageDraftPattern(
           preview.url,
           {
             width: patternWidth,
@@ -630,14 +155,14 @@ export function HomePatternMaker() {
       return;
     }
 
-    if (!acceptedTypes.includes(file.type)) {
+    if (!acceptedImageTypes.includes(file.type)) {
       setPreview(null);
       setError("Please upload a PNG, JPG, or WebP image.");
       event.target.value = "";
       return;
     }
 
-    if (file.size > maxFileSize) {
+    if (file.size > maxImageFileSize) {
       setPreview(null);
       setError("Please choose an image under 15 MB.");
       event.target.value = "";
@@ -647,7 +172,7 @@ export function HomePatternMaker() {
     setIsPreparing(true);
 
     try {
-      const nextPreview = await createPreview(file);
+      const nextPreview = await createImagePreview(file);
 
       if (previewRequestId.current !== requestId) {
         URL.revokeObjectURL(nextPreview.url);
@@ -685,24 +210,20 @@ export function HomePatternMaker() {
     setIsExporting(true);
 
     try {
-      const canvas = renderPatternToCanvas({
+      const canvas = renderConvertedPatternPreviewToCanvas({
         pattern: pixelPattern,
         previewMode,
         showGridLines,
       });
-      const exportBlob = await new Promise<Blob>((resolve, reject) => {
-        canvas.toBlob((blob) => {
-          if (blob) {
-            resolve(blob);
-          } else {
-            reject(new Error("Your browser could not create the PNG export."));
-          }
-        }, "image/png");
-      });
+      const exportBlob = await createPngBlob(canvas);
 
       downloadBlob(
         exportBlob,
-        getPatternExportFileName(pixelPattern, previewMode, showGridLines),
+        getConvertedPatternExportFileName(
+          pixelPattern,
+          previewMode,
+          showGridLines,
+        ),
       );
     } catch (pngExportError) {
       setExportError(
@@ -1253,3 +774,4 @@ export function HomePatternMaker() {
     </section>
   );
 }
+

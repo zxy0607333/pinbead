@@ -180,6 +180,34 @@ export function PatternEditorShell() {
     palette.colors[0];
   const colorMap = new Map(palette.colors.map((color) => [color.id, color]));
   const filledCellCount = cells.filter(Boolean).length;
+  const colorCounts = cells.reduce((counts, colorId) => {
+    if (!colorId) {
+      return counts;
+    }
+
+    counts.set(colorId, (counts.get(colorId) ?? 0) + 1);
+    return counts;
+  }, new Map<string, number>());
+  const colorStats = palette.colors
+    .map((color) => ({
+      color,
+      count: colorCounts.get(color.id) ?? 0,
+    }))
+    .filter((stat) => stat.count > 0)
+    .sort((firstStat, secondStat) => {
+      if (secondStat.count !== firstStat.count) {
+        return secondStat.count - firstStat.count;
+      }
+
+      return firstStat.color.code.localeCompare(secondStat.color.code);
+    });
+  const countedBeadCount = colorStats.reduce(
+    (total, stat) => total + stat.count,
+    0,
+  );
+  const selectedColorCount = activeColor
+    ? colorCounts.get(activeColor.id) ?? 0
+    : 0;
   const coordinates = Array.from({ length: canvasSize }, (_, index) => index + 1);
   const coordinateGutter = showCoordinates ? 28 : 0;
   const cellCodeFontSize = getCellCodeFontSize(canvasSize);
@@ -520,32 +548,42 @@ export function PatternEditorShell() {
             {palette.description}
           </p>
           <div className="mt-4 grid max-h-[360px] gap-2 overflow-auto pr-1">
-            {palette.colors.map((color) => (
-              <button
-                className={`flex items-center gap-3 rounded-md border px-3 py-2 text-left transition ${
-                  activeColor?.id === color.id
-                    ? "border-[var(--accent)] bg-[var(--surface-soft)]"
-                    : "border-[var(--border)] bg-white hover:border-[var(--accent)]"
-                }`}
-                key={color.id}
-                onClick={() => setActiveColorId(color.id)}
-                type="button"
-              >
-                <span
-                  aria-hidden="true"
-                  className="h-7 w-7 rounded-md border border-black/10"
-                  style={{ backgroundColor: color.hex }}
-                />
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-semibold text-[var(--foreground)]">
-                    {color.name}
+            {palette.colors.map((color) => {
+              const colorUseCount = colorCounts.get(color.id) ?? 0;
+              const isSelectedColor = activeColor?.id === color.id;
+
+              return (
+                <button
+                  aria-label={`${color.code} ${color.name}, ${color.hex}, ${colorUseCount} beads used`}
+                  aria-pressed={isSelectedColor}
+                  className={`flex items-center gap-3 rounded-md border px-3 py-2 text-left transition ${
+                    isSelectedColor
+                      ? "border-[var(--accent)] bg-[var(--surface-soft)]"
+                      : "border-[var(--border)] bg-white hover:border-[var(--accent)]"
+                  }`}
+                  key={color.id}
+                  onClick={() => setActiveColorId(color.id)}
+                  type="button"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="h-7 w-7 shrink-0 rounded-md border border-black/10"
+                    style={{ backgroundColor: color.hex }}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold text-[var(--foreground)]">
+                      {color.name}
+                    </span>
+                    <span className="block text-xs text-[var(--muted)]">
+                      {color.code} - {color.hex}
+                    </span>
                   </span>
-                  <span className="block text-xs text-[var(--muted)]">
-                    {color.code} - {color.hex}
+                  <span className="rounded-full bg-[var(--surface-soft)] px-2 py-1 text-xs font-semibold tabular-nums text-[var(--muted)]">
+                    {colorUseCount}
                   </span>
-                </span>
-              </button>
-            ))}
+                </button>
+              );
+            })}
           </div>
         </section>
 
@@ -561,27 +599,99 @@ export function PatternEditorShell() {
               </span>
             </div>
             <div className="flex justify-between gap-3 rounded-md bg-[var(--surface-soft)] px-3 py-2">
-              <span className="text-[var(--muted)]">Filled cells</span>
+              <span className="text-[var(--muted)]">Total beads</span>
               <span className="font-semibold">
-                {filledCellCount} / {cells.length}
+                {countedBeadCount} / {cells.length}
               </span>
             </div>
             <div className="flex justify-between gap-3 rounded-md bg-[var(--surface-soft)] px-3 py-2">
-              <span className="text-[var(--muted)]">Selected color</span>
-              <span className="font-semibold">{activeColor?.code}</span>
+              <span className="text-[var(--muted)]">Used colors</span>
+              <span className="font-semibold">
+                {colorStats.length} / {palette.colors.length}
+              </span>
             </div>
             <div className="flex justify-between gap-3 rounded-md bg-[var(--surface-soft)] px-3 py-2">
               <span className="text-[var(--muted)]">Filled</span>
               <span className="font-semibold">{filledPercent}%</span>
             </div>
           </div>
+
           <div className="mt-4 rounded-md border border-[var(--border)] bg-white px-3 py-3 text-sm">
-            <span
-              aria-hidden="true"
-              className="mr-2 inline-block h-4 w-4 rounded-sm border border-black/10 align-middle"
-              style={{ backgroundColor: activeColorHex }}
-            />
-            <span className="font-semibold">{activeColorLabel}</span>
+            <div className="flex items-center gap-3">
+              <span
+                aria-hidden="true"
+                className="h-8 w-8 shrink-0 rounded-md border border-black/10"
+                style={{ backgroundColor: activeColorHex }}
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block text-xs font-semibold text-[var(--muted)]">
+                  Selected color
+                </span>
+                <span className="block truncate font-semibold">
+                  {activeColorLabel}
+                </span>
+                <span className="block text-xs text-[var(--muted)]">
+                  {activeColor?.hex ?? "#ffffff"}
+                </span>
+              </span>
+              <span className="rounded-full bg-[var(--surface-soft)] px-2 py-1 text-xs font-semibold tabular-nums text-[var(--accent)]">
+                {selectedColorCount}
+              </span>
+            </div>
+          </div>
+
+          <div className="mt-4 border-t border-[var(--border)] pt-4">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-semibold text-[var(--foreground)]">
+                Color count
+              </p>
+              <span className="text-xs font-semibold tabular-nums text-[var(--muted)]">
+                {countedBeadCount} beads
+              </span>
+            </div>
+
+            {colorStats.length > 0 ? (
+              <div className="mt-3 grid max-h-[320px] gap-2 overflow-auto pr-1">
+                {colorStats.map((stat) => {
+                  const percentage = Math.round(
+                    (stat.count / Math.max(1, countedBeadCount)) * 100,
+                  );
+
+                  return (
+                    <div
+                      className="grid grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-3 rounded-md border border-[var(--border)] bg-white px-3 py-2 text-sm"
+                      key={stat.color.id}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="h-7 w-7 rounded-md border border-black/10"
+                        style={{ backgroundColor: stat.color.hex }}
+                      />
+                      <span className="min-w-0">
+                        <span className="block truncate font-semibold text-[var(--foreground)]">
+                          {stat.color.name}
+                        </span>
+                        <span className="block text-xs text-[var(--muted)]">
+                          {stat.color.code} - {stat.color.hex}
+                        </span>
+                      </span>
+                      <span className="text-right">
+                        <span className="block font-semibold tabular-nums text-[var(--foreground)]">
+                          {stat.count}
+                        </span>
+                        <span className="block text-xs tabular-nums text-[var(--muted)]">
+                          {percentage}%
+                        </span>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="mt-3 rounded-md border border-dashed border-[var(--border)] bg-white px-3 py-4 text-sm text-[var(--muted)]">
+                No beads placed yet.
+              </p>
+            )}
           </div>
         </section>
       </aside>

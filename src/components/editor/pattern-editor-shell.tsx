@@ -1,8 +1,7 @@
 "use client";
 
 import { beadPalettes, defaultBeadPaletteId } from "@/data/bead-palettes";
-import { useMemo, useState } from "react";
-import type { PointerEvent } from "react";
+import { useState } from "react";
 
 const canvasSizes = [16, 24, 32, 50];
 const tools = ["Brush", "Eraser", "Fill"] as const;
@@ -14,6 +13,71 @@ function getDefaultPalette() {
     beadPalettes.find((palette) => palette.id === defaultBeadPaletteId) ??
     beadPalettes[0]
   );
+}
+
+function getNeighborIndexes(index: number, size: number) {
+  const row = Math.floor(index / size);
+  const column = index % size;
+  const neighbors: number[] = [];
+
+  if (row > 0) {
+    neighbors.push(index - size);
+  }
+
+  if (row < size - 1) {
+    neighbors.push(index + size);
+  }
+
+  if (column > 0) {
+    neighbors.push(index - 1);
+  }
+
+  if (column < size - 1) {
+    neighbors.push(index + 1);
+  }
+
+  return neighbors;
+}
+
+function fillConnectedArea(
+  cells: Array<string | null>,
+  startIndex: number,
+  size: number,
+  nextColorId: string | null,
+) {
+  const targetColorId = cells[startIndex];
+
+  if (targetColorId === nextColorId) {
+    return cells;
+  }
+
+  const nextCells = [...cells];
+  const queue = [startIndex];
+  const visited = new Set<number>();
+
+  while (queue.length > 0) {
+    const currentIndex = queue.shift();
+
+    if (currentIndex === undefined || visited.has(currentIndex)) {
+      continue;
+    }
+
+    visited.add(currentIndex);
+
+    if (nextCells[currentIndex] !== targetColorId) {
+      continue;
+    }
+
+    nextCells[currentIndex] = nextColorId;
+
+    for (const neighborIndex of getNeighborIndexes(currentIndex, size)) {
+      if (!visited.has(neighborIndex)) {
+        queue.push(neighborIndex);
+      }
+    }
+  }
+
+  return nextCells;
 }
 
 export function PatternEditorShell() {
@@ -31,10 +95,7 @@ export function PatternEditorShell() {
   const activeColor =
     palette.colors.find((color) => color.id === activeColorId) ??
     palette.colors[0];
-  const colorMap = useMemo(
-    () => new Map(palette.colors.map((color) => [color.id, color])),
-    [palette.colors],
-  );
+  const colorMap = new Map(palette.colors.map((color) => [color.id, color]));
   const filledCellCount = cells.filter(Boolean).length;
 
   function handleCanvasSizeChange(size: number) {
@@ -58,18 +119,51 @@ export function PatternEditorShell() {
     });
   }
 
-  function handleCellPointerDown(
-    event: PointerEvent<HTMLButtonElement>,
-    index: number,
-  ) {
-    event.currentTarget.setPointerCapture(event.pointerId);
-    setIsDrawing(true);
-    paintCell(index);
+  function eraseCell(index: number) {
+    setCells((currentCells) => {
+      if (currentCells[index] === null) {
+        return currentCells;
+      }
+
+      const nextCells = [...currentCells];
+      nextCells[index] = null;
+      return nextCells;
+    });
+  }
+
+  function fillCell(index: number) {
+    setCells((currentCells) =>
+      fillConnectedArea(
+        currentCells,
+        index,
+        canvasSize,
+        activeColor?.id ?? null,
+      ),
+    );
+  }
+
+  function applyTool(index: number) {
+    if (activeTool === "Brush") {
+      paintCell(index);
+      return;
+    }
+
+    if (activeTool === "Eraser") {
+      eraseCell(index);
+      return;
+    }
+
+    fillCell(index);
+  }
+
+  function handleCellPointerDown(index: number) {
+    setIsDrawing(activeTool !== "Fill");
+    applyTool(index);
   }
 
   function handleCellPointerEnter(index: number) {
-    if (isDrawing) {
-      paintCell(index);
+    if (isDrawing && activeTool !== "Fill") {
+      applyTool(index);
     }
   }
 
@@ -92,19 +186,23 @@ export function PatternEditorShell() {
         }
         className="aspect-square touch-none bg-white"
         key={index}
-        onPointerDown={(event) => handleCellPointerDown(event, index)}
+        onPointerDown={() => handleCellPointerDown(index)}
         onPointerEnter={() => handleCellPointerEnter(index)}
         onPointerUp={stopDrawing}
+        role="gridcell"
         style={{ backgroundColor: color?.hex ?? "#ffffff" }}
         type="button"
       />
     );
   });
 
-  const currentToolHint =
-    activeTool === "Brush"
-      ? "Click or drag across cells to paint with the selected color."
-      : "This tool will be wired in the next editor task.";
+  const toolHints: Record<EditorTool, string> = {
+    Brush: "Click or drag across cells to paint with the selected color.",
+    Eraser: "Click or drag across cells to clear beads from the canvas.",
+    Fill: "Click a cell to fill its connected color area with the selected bead color.",
+  };
+
+  const currentToolHint = toolHints[activeTool];
 
   const activeColorLabel = activeColor
     ? `${activeColor.code} ${activeColor.name}`
@@ -197,7 +295,7 @@ export function PatternEditorShell() {
             </p>
           </div>
           <span className="rounded-full bg-[var(--surface-soft)] px-3 py-1 text-xs font-semibold text-[var(--accent)]">
-            {activeTool} · {activeColor?.code}
+            {activeTool} / {activeColor?.code}
           </span>
         </div>
 

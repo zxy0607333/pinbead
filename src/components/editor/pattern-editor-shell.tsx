@@ -7,6 +7,11 @@ const canvasSizes = [16, 24, 32, 50];
 const tools = ["Brush", "Eraser", "Fill"] as const;
 
 type EditorTool = (typeof tools)[number];
+type ViewToggleButtonProps = {
+  isActive: boolean;
+  label: string;
+  onClick: () => void;
+};
 
 function getDefaultPalette() {
   return (
@@ -80,6 +85,82 @@ function fillConnectedArea(
   return nextCells;
 }
 
+function getReadableTextColor(hex: string) {
+  const normalizedHex = hex.replace("#", "");
+  const red = Number.parseInt(normalizedHex.slice(0, 2), 16);
+  const green = Number.parseInt(normalizedHex.slice(2, 4), 16);
+  const blue = Number.parseInt(normalizedHex.slice(4, 6), 16);
+  const brightness = (red * 299 + green * 587 + blue * 114) / 1000;
+
+  return brightness < 145 ? "#ffffff" : "#111827";
+}
+
+function getCellCodeFontSize(size: number) {
+  if (size >= 50) {
+    return 5;
+  }
+
+  if (size >= 32) {
+    return 7;
+  }
+
+  if (size >= 24) {
+    return 9;
+  }
+
+  return 11;
+}
+
+function getCoordinateFontSize(size: number) {
+  if (size >= 50) {
+    return 9;
+  }
+
+  if (size >= 32) {
+    return 10;
+  }
+
+  return 11;
+}
+
+function getBoardMinWidth(size: number, showColorCodes: boolean) {
+  if (!showColorCodes) {
+    return size >= 50 ? 620 : 420;
+  }
+
+  if (size >= 32) {
+    return 760;
+  }
+
+  if (size >= 24) {
+    return 720;
+  }
+
+  return 560;
+}
+
+function ViewToggleButton({ isActive, label, onClick }: ViewToggleButtonProps) {
+  return (
+    <button
+      aria-pressed={isActive}
+      className="flex w-full items-center justify-between gap-3 rounded-md border border-[var(--border)] bg-white px-3 py-3 text-left text-sm font-semibold transition hover:border-[var(--accent)]"
+      onClick={onClick}
+      type="button"
+    >
+      <span>{label}</span>
+      <span
+        className={`rounded-full px-3 py-1 text-xs ${
+          isActive
+            ? "bg-[var(--surface-soft)] text-[var(--accent)]"
+            : "bg-[var(--border)] text-[var(--muted)]"
+        }`}
+      >
+        {isActive ? "On" : "Off"}
+      </span>
+    </button>
+  );
+}
+
 export function PatternEditorShell() {
   const palette = getDefaultPalette();
   const [canvasSize, setCanvasSize] = useState(24);
@@ -92,11 +173,18 @@ export function PatternEditorShell() {
   );
   const [isDrawing, setIsDrawing] = useState(false);
   const [showGridLines, setShowGridLines] = useState(true);
+  const [showCoordinates, setShowCoordinates] = useState(true);
+  const [showColorCodes, setShowColorCodes] = useState(true);
   const activeColor =
     palette.colors.find((color) => color.id === activeColorId) ??
     palette.colors[0];
   const colorMap = new Map(palette.colors.map((color) => [color.id, color]));
   const filledCellCount = cells.filter(Boolean).length;
+  const coordinates = Array.from({ length: canvasSize }, (_, index) => index + 1);
+  const coordinateGutter = showCoordinates ? 28 : 0;
+  const cellCodeFontSize = getCellCodeFontSize(canvasSize);
+  const coordinateFontSize = getCoordinateFontSize(canvasSize);
+  const boardMinWidth = getBoardMinWidth(canvasSize, showColorCodes);
 
   function handleCanvasSizeChange(size: number) {
     setCanvasSize(size);
@@ -176,15 +264,19 @@ export function PatternEditorShell() {
 
   const gridCells = cells.map((colorId, index) => {
     const color = colorId ? colorMap.get(colorId) : null;
+    const row = Math.floor(index / canvasSize) + 1;
+    const column = (index % canvasSize) + 1;
 
     return (
       <button
         aria-label={
           color
-            ? `Cell ${index + 1}, ${color.code} ${color.name}`
-            : `Empty cell ${index + 1}`
+            ? `Row ${row}, column ${column}, ${color.code} ${color.name}`
+            : `Empty cell, row ${row}, column ${column}`
         }
-        className="aspect-square touch-none bg-white"
+        aria-colindex={column}
+        aria-rowindex={row}
+        className="flex aspect-square touch-none items-center justify-center overflow-hidden bg-white"
         key={index}
         onPointerDown={() => handleCellPointerDown(index)}
         onPointerEnter={() => handleCellPointerEnter(index)}
@@ -192,7 +284,23 @@ export function PatternEditorShell() {
         role="gridcell"
         style={{ backgroundColor: color?.hex ?? "#ffffff" }}
         type="button"
-      />
+      >
+        {color && showColorCodes ? (
+          <span
+            aria-hidden="true"
+            className="select-none font-semibold tabular-nums"
+            style={{
+              color: getReadableTextColor(color.hex),
+              fontSize: cellCodeFontSize,
+              letterSpacing: 0,
+              lineHeight: 1,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {color.code}
+          </span>
+        ) : null}
+      </button>
     );
   });
 
@@ -210,11 +318,48 @@ export function PatternEditorShell() {
 
   const activeColorHex = activeColor?.hex ?? "#ffffff";
 
-  const gridLineLabel = showGridLines ? "Grid on" : "Grid off";
-
   const filledPercent = Math.round(
     (filledCellCount / Math.max(1, cells.length)) * 100,
   );
+
+  const patternCanvas = (
+    <div
+      aria-colcount={canvasSize}
+      aria-label={`${canvasSize} by ${canvasSize} editable bead pattern canvas`}
+      aria-rowcount={canvasSize}
+      className="grid aspect-square overflow-hidden rounded-md border border-[var(--border)] shadow-sm"
+      onPointerCancel={stopDrawing}
+      onPointerLeave={stopDrawing}
+      onPointerUp={stopDrawing}
+      role="grid"
+      style={{
+        backgroundColor: gridBackground,
+        gap: gridGap,
+        gridTemplateColumns: `repeat(${canvasSize}, minmax(0, 1fr))`,
+      }}
+    >
+      {gridCells}
+    </div>
+  );
+
+  const coordinateLabelClass =
+    "flex min-w-0 items-center justify-center overflow-hidden bg-[var(--surface-soft)] font-semibold tabular-nums text-[var(--muted)]";
+
+  function renderCoordinateLabels() {
+    return coordinates.map((coordinate) => (
+      <span
+        className={coordinateLabelClass}
+        key={coordinate}
+        style={{
+          fontSize: coordinateFontSize,
+          letterSpacing: 0,
+          lineHeight: 1,
+        }}
+      >
+        {coordinate}
+      </span>
+    ));
+  }
 
   return (
     <div className="grid gap-5 xl:grid-cols-[260px_minmax(0,1fr)_300px]">
@@ -267,22 +412,23 @@ export function PatternEditorShell() {
           <p className="text-sm font-semibold text-[var(--foreground)]">
             View
           </p>
-          <button
-            className="mt-3 flex w-full items-center justify-between gap-3 rounded-md border border-[var(--border)] bg-white px-3 py-3 text-left text-sm font-semibold transition hover:border-[var(--accent)]"
-            onClick={() => setShowGridLines((current) => !current)}
-            type="button"
-          >
-            <span>{gridLineLabel}</span>
-            <span
-              className={`rounded-full px-3 py-1 text-xs ${
-                showGridLines
-                  ? "bg-[var(--surface-soft)] text-[var(--accent)]"
-                  : "bg-[var(--border)] text-[var(--muted)]"
-              }`}
-            >
-              {showGridLines ? "On" : "Off"}
-            </span>
-          </button>
+          <div className="mt-3 grid gap-2">
+            <ViewToggleButton
+              isActive={showGridLines}
+              label="Grid lines"
+              onClick={() => setShowGridLines((current) => !current)}
+            />
+            <ViewToggleButton
+              isActive={showCoordinates}
+              label="Coordinates"
+              onClick={() => setShowCoordinates((current) => !current)}
+            />
+            <ViewToggleButton
+              isActive={showColorCodes}
+              label="Color codes"
+              onClick={() => setShowColorCodes((current) => !current)}
+            />
+          </div>
         </section>
       </aside>
 
@@ -299,23 +445,64 @@ export function PatternEditorShell() {
           </span>
         </div>
 
-        <div className="mt-5 overflow-auto">
-          <div className="mx-auto min-w-[320px] max-w-[680px]">
-            <div
-              aria-label={`${canvasSize} by ${canvasSize} editable bead pattern canvas`}
-              className="grid aspect-square overflow-hidden rounded-md border border-[var(--border)] shadow-sm"
-              onPointerCancel={stopDrawing}
-              onPointerLeave={stopDrawing}
-              onPointerUp={stopDrawing}
-              role="grid"
-              style={{
-                backgroundColor: gridBackground,
-                gap: gridGap,
-                gridTemplateColumns: `repeat(${canvasSize}, minmax(0, 1fr))`,
-              }}
-            >
-              {gridCells}
-            </div>
+        <div className="mt-5 overflow-auto pb-2">
+          <div
+            className="mx-auto max-w-[760px]"
+            style={{ minWidth: boardMinWidth }}
+          >
+            {showCoordinates ? (
+              <div
+                className="grid"
+                style={{
+                  gridTemplateColumns: `${coordinateGutter}px minmax(0, 1fr) ${coordinateGutter}px`,
+                  gridTemplateRows: `${coordinateGutter}px minmax(0, 1fr) ${coordinateGutter}px`,
+                }}
+              >
+                <span aria-hidden="true" />
+                <div
+                  aria-hidden="true"
+                  className="grid border-x border-t border-[var(--border)]"
+                  style={{
+                    gridTemplateColumns: `repeat(${canvasSize}, minmax(0, 1fr))`,
+                  }}
+                >
+                  {renderCoordinateLabels()}
+                </div>
+                <span aria-hidden="true" />
+                <div
+                  aria-hidden="true"
+                  className="grid border-y border-l border-[var(--border)]"
+                  style={{
+                    gridTemplateRows: `repeat(${canvasSize}, minmax(0, 1fr))`,
+                  }}
+                >
+                  {renderCoordinateLabels()}
+                </div>
+                {patternCanvas}
+                <div
+                  aria-hidden="true"
+                  className="grid border-y border-r border-[var(--border)]"
+                  style={{
+                    gridTemplateRows: `repeat(${canvasSize}, minmax(0, 1fr))`,
+                  }}
+                >
+                  {renderCoordinateLabels()}
+                </div>
+                <span aria-hidden="true" />
+                <div
+                  aria-hidden="true"
+                  className="grid border-x border-b border-[var(--border)]"
+                  style={{
+                    gridTemplateColumns: `repeat(${canvasSize}, minmax(0, 1fr))`,
+                  }}
+                >
+                  {renderCoordinateLabels()}
+                </div>
+                <span aria-hidden="true" />
+              </div>
+            ) : (
+              patternCanvas
+            )}
           </div>
         </div>
 

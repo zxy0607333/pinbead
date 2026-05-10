@@ -1,109 +1,208 @@
 # 产品规划
 
+最后更新：2026-05-10
+
 ## 产品定位
 
-Pinbead 是一个面向英文用户的拼豆图纸工具站。
+Pinbead 面向海外英文市场，定位为：
 
-核心价值：
+```text
+Bead pattern editor and printable pattern library.
+```
 
-- Turn any image into a printable pin bead pattern.
-- Browse free printable bead patterns for beginners and craft projects.
-- Generate bead counts, color lists, and clean pattern previews.
+它不是单纯的图片转换器。更准确的产品关系是：
 
-建议避免把站点品牌绑定到某个商标词，例如 Perler。Perler 是具体品牌，站点主品牌更适合使用 pin bead、fuse bead、pixel bead、bead pattern 等泛化词。页面里可以表达支持 Perler、Hama、Artkal、MARD 等色卡。
+```text
+Editor is the core.
+Image conversion is an import method.
+Pattern library is the SEO and content engine.
+```
 
-## 目标用户
+中文说明：
 
-- Craft makers：把宠物、头像、插画转成拼豆图纸。
-- Parents and teachers：寻找简单、可打印、适合课堂或亲子活动的图案。
-- Hobby creators：收藏、下载、后期分享自己的像素拼豆作品。
-- SEO users：通过 `image to bead pattern`、`perler bead pattern generator`、`free printable bead patterns` 等关键词进入站点。
+```text
+编辑器是核心。
+图片转换只是导入草稿。
+图纸库负责 SEO、内容厚度和 AdSense。
+```
 
-## MVP 核心流程
+## 为什么要调整方向
 
-### 私人生成流程
+直接把图片缩小并匹配色卡，通常只能得到草稿，不一定能得到真正可制作的拼豆图纸。常见问题包括：
+
+- 眼睛、嘴巴、表情位置不对称。
+- 小尺寸图纸细节糊掉。
+- 轮廓断裂，主体不清晰。
+- 颜色数量减少后画面变脏。
+- 生成结果看起来像像素图，但不适合照着拼。
+
+因此产品必须支持用户继续编辑。合理流程是：
 
 ```text
 Upload image
--> Crop and resize in browser
--> Pixelate image
--> Match bead palette colors
--> Preview as pixels or round beads
--> Export PNG/PDF/color list
+-> Generate draft pattern
+-> Open in editor
+-> Fix eyes, outlines, colors, and details
+-> Export printable chart
 ```
 
-默认不上传用户原图。这样可以减少存储成本、版权风险和隐私压力。
+## 目标用户
 
-### 公开图纸库流程
+- Craft makers：从零设计或修改拼豆图纸。
+- Parents and teachers：下载可打印的新手图纸和课堂活动素材。
+- Hobby creators：上传图片生成草稿，再手动修正成可制作图纸。
+- SEO users：通过 `bead pattern maker`、`image to bead pattern`、`free printable bead patterns` 等关键词进入站点。
+
+## 核心页面
+
+### 首页 `/`
+
+首页不放完整重工具，而是轻量介绍和分流。
+
+首页目标：
+
+- 让用户快速理解 Pinbead 是拼豆图纸编辑器和图库。
+- 引导用户进入 `/editor`、`/convert`、`/patterns`。
+- 展示精选图纸、热门分类、入门教程。
+- 末尾展示精选瀑布流，但不做无限社区流。
+
+首页主 CTA：
 
 ```text
-Curated original pattern
--> Pattern detail page
--> Preview image
--> Bead count and color list
--> Printable download
--> Related patterns
--> AdSense placement after approval
+Start designing
 ```
 
-公开图纸库是前期 SEO 和 AdSense 的主要承载页面。
-
-### 用户分享流程
+次 CTA：
 
 ```text
-Generated pattern
--> User clicks Share
--> Login
--> Confirm ownership and public license
--> Submit to moderation queue
--> Admin approval
--> Public gallery page
+Convert image
+Browse patterns
 ```
 
-这个流程不建议第一版上线。等站点有自然流量、有人愿意保存和分享后再做。
+### 编辑器 `/editor`
+
+编辑器是核心产品。
+
+第一版编辑器应支持：
+
+- 设置画布尺寸，例如 16x16、24x24、32x32、50x50。
+- 网格编辑。
+- 画笔、橡皮、填充。
+- 色卡选择。
+- 每格显示色号。
+- 顶部、左侧、右侧、底部坐标编号。
+- 颜色统计。
+- PNG 导出。
+- 后续支持 PDF 导出。
+
+参考图纸应接近实际制作需要，而不只是展示漂亮预览。
+
+### 转换器 `/convert`
+
+转换器负责图片导入。
+
+它的定位不是“生成最终图纸”，而是：
+
+```text
+Turn an image into an editable bead pattern draft.
+```
+
+流程：
+
+```text
+Upload image
+-> Crop and choose size
+-> Match palette and reduce colors
+-> Generate draft
+-> Open in editor
+```
+
+### 图纸库 `/patterns`
+
+图纸库是 SEO 和 AdSense 的核心承载区。
+
+它应展示：
+
+- 精选原创图纸。
+- 分类入口。
+- 热门/新手/节日图纸。
+- 可打印图纸详情页入口。
+
+### 分类页 `/categories/[categorySlug]`
+
+分类页用于承接长尾 SEO 和用户浏览。
+
+首批分类建议：
+
+- Animals
+- Food
+- Holidays
+- Beginner
+- Cute
+- Nature
+- Letters & Numbers
+
+第一版不要创建大量空分类。每个分类必须有足够图纸和独特说明。
+
+### 图纸详情页 `/pattern/[patternSlug]`
+
+图纸详情页是最重要的 SEO 页面之一。
+
+每个图纸页至少包含：
+
+- 图纸预览。
+- 尺寸。
+- 难度。
+- 颜色数量。
+- 每种颜色用豆数量。
+- 可打印下载。
+- 制作提示。
+- 相关图纸。
+
+### 教程页 `/guides/[guideSlug]`
+
+教程页承接长尾搜索和 AdSense。
+
+首批教程：
+
+- How to Make a Bead Pattern
+- How to Turn a Photo into a Bead Pattern
+- How to Use the Pinbead Editor
+- Bead Color Chart
+- How to Print and Follow a Bead Pattern
 
 ## 内容来源
 
-前期公开图库的内容来源建议按优先级排序：
+公开图库优先级：
 
-1. 自己原创的简单像素图纸。
-2. AI 辅助生成的原创图标，再人工调整为拼豆图纸。
-3. Public Domain / CC0 素材转制，并记录来源和许可证。
-4. 设计师授权投稿。
+1. 自己原创的拼豆图纸。
+2. AI 辅助原创后人工修正的图纸。
+3. Public Domain / CC0 素材转制，并记录来源。
+4. 授权设计师投稿。
 5. 用户投稿，必须审核后公开。
 
-不建议公开收录高风险 IP 内容，例如 Disney、Nintendo、Pokemon、Marvel、Sanrio、明星照片、影视剧角色、动漫角色等。
+不建议公开收录高风险 IP 内容，例如 Disney、Nintendo、Pokemon、Marvel、Sanrio、明星照片、影视角色和动漫角色。
 
 ## 前期不做
 
-流量没起来之前，以下功能可以延后：
+流量没起来之前，以下功能后置：
 
-- 用户注册、个人主页、作品流。
-- 点赞、评论、关注、站内通知。
-- 在线多图层高级编辑器。
-- 服务器端图片处理和背景移除。
+- 评论。
+- 关注流。
+- 站内私信。
+- 复杂社区动态。
+- 付费会员。
+- 原生移动 App。
 - AI 自动审核。
-- 付费会员、订阅、积分系统。
-- 移动 App。
-- 多语言全量内容。
+- 服务器端保存所有上传原图。
 
-前期做这些会增加审核、运维和产品复杂度，但对 SEO 起量和 AdSense 审核帮助有限。
+## 第一阶段目标
 
-## 第一批页面建议
+当前代码已经有一个首页工具原型，包括图片上传、裁剪、像素化、色卡匹配、颜色限制、预览、用豆统计和 PNG 导出。下一步不继续把它堆在首页，而是拆分成：
 
-- `/`：首页，首屏就是工具，不做空泛营销页。
-- `/image-to-bead-pattern`：图片转拼豆图纸工具页。
-- `/patterns`：免费图纸库。
-- `/patterns/animals`
-- `/patterns/food`
-- `/patterns/holidays`
-- `/patterns/cute-icons`
-- `/patterns/letters-numbers`
-- `/guides/how-to-turn-a-photo-into-a-bead-pattern`
-- `/guides/beginner-pin-bead-tips`
-- `/guides/bead-color-chart`
-- `/privacy-policy`
-- `/terms`
-- `/contact`
-- `/copyright`
+```text
+/editor  核心编辑器
+/convert 图片导入入口
+/        轻量首页
+```
 

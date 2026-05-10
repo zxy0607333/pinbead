@@ -1,157 +1,174 @@
 # 内容、SEO 与 AdSense
 
-## 英文关键词方向
+最后更新：2026-05-10
 
-核心工具词：
+## SEO 总体判断
+
+编辑器优先不会影响 SEO，反而让产品更清楚。首页不需要承载完整重工具；SEO 主力应该来自页面矩阵：
+
+```text
+/editor
+/convert
+/patterns
+/categories/[categorySlug]
+/pattern/[patternSlug]
+/guides/[guideSlug]
+```
+
+首页负责分流，图纸页、分类页、教程页和工具介绍页负责搜索承接。
+
+## 推荐 URL 结构
+
+```text
+/                              首页
+/editor                        拼豆图纸编辑器
+/convert                       图片转拼豆图纸
+/patterns                      免费图纸库
+/categories/animals            动物分类
+/categories/food               食物分类
+/categories/holidays           节日分类
+/categories/beginner           新手分类
+/pattern/cute-cat              单个图纸详情页
+/guides                        教程列表
+/guides/bead-color-chart       教程详情页
+```
+
+不使用 `/c`、`/p` 这类过短路径。分类和详情分开，避免 `/patterns/animals` 与 `/patterns/cute-cat` 同级混淆。
+
+## 首页 SEO 和设计
+
+首页建议轻量设计：
+
+1. Header：Logo、Patterns、Editor、Convert、Guides。
+2. Hero：明确 Pinbead 是 bead pattern editor and printable pattern library。
+3. CTA：`Start designing`、`Convert image`、`Browse patterns`。
+4. Featured categories：Animals、Food、Holidays、Beginner、Cute、Nature。
+5. How Pinbead works：Create from scratch、Convert image to draft、Edit details、Export printable pattern。
+6. Editor highlight：展示网格、色号、颜色统计和导出能力。
+7. Beginner-friendly pattern library：展示 6-8 个精选图纸。
+8. Guides：展示 3 个教程入口。
+9. Featured pattern feed：末尾展示精选瀑布流。
+
+首页末尾可以做瀑布流，但第一版不要无限加载。建议展示 12-20 个精选图纸，用于视觉展示和内链。
+
+## 关键词方向
+
+### 编辑器词
+
+- bead pattern maker
+- bead pattern editor
+- pin bead pattern maker
+- fuse bead pattern maker
+- pixel bead pattern maker
+- printable bead pattern maker
+
+### 图片转换词
 
 - image to bead pattern
 - photo to bead pattern
-- bead pattern maker
-- pin bead pattern generator
-- fuse bead pattern maker
-- perler bead pattern generator
+- picture to bead pattern
+- image to perler bead pattern
 - pixel bead pattern generator
 
-图库词：
+`/convert` URL 虽短，但页面 title、H1、描述和正文要覆盖这些词。
+
+### 图库词
 
 - free printable bead patterns
-- easy perler bead patterns
-- beginner fuse bead patterns
-- cute bead patterns
+- beginner bead patterns
 - animal bead patterns
 - holiday bead patterns
+- cute bead patterns
 - bead keychain patterns
 
-教程词：
+### 教程词
 
-- how to make a bead pattern from a photo
-- how to pixelate a photo for perler beads
-- how many beads do I need
-- best size for perler bead patterns
-- perler vs hama bead colors
+- how to make a bead pattern
+- how to turn a photo into a bead pattern
+- how to use a bead pattern editor
+- how to print a bead pattern
+- bead color chart
 
-注意：Perler 是品牌词，可以在页面内容里自然使用，但不建议把站点主品牌或主要域名绑定为 Perler。
+## 分类策略
 
-## 内容结构
-
-### 工具页
-
-`/image-to-bead-pattern`
-
-页面要解决真实问题，而不是只有上传按钮：
-
-- 上传图片生成图纸。
-- 支持尺寸、色卡、颜色数设置。
-- 展示预览、bead count、下载。
-- 解释图片不会默认上传服务器。
-- 给出适合初学者的尺寸建议。
-- 链接到相关 guide 和 pattern library。
-
-### 图纸详情页
-
-每个图纸页至少包含：
-
-- 标题，例如 `Cute Cat Bead Pattern`
-- 预览图。
-- 尺寸，例如 `24 x 24 beads`
-- 难度。
-- 颜色数量。
-- 总 bead count。
-- 每种颜色数量。
-- Printable PDF 下载。
-- PNG 下载。
-- 2-4 段独特制作说明。
-- 相关图纸。
-
-不要批量生成只有图片、没有说明的薄页面。
-
-### 分类页
-
-分类建议：
+第一版建议只做少量高质量分类：
 
 - Animals
 - Food
 - Holidays
-- Cute Icons
+- Beginner
+- Cute
 - Nature
 - Letters & Numbers
-- Keychain Patterns
-- Beginner Patterns
 
-分类页要有简短介绍和人工挑选排序，不要只是裸列表。
+每个分类页需要：
 
-### 教程页
+- 独特英文介绍。
+- 该分类下的精选图纸。
+- 内链到 `/editor`、`/convert` 和相关教程。
+- 不要创建空分类或只有 1-2 个图纸的分类。
 
-前期优先写：
+## 图纸详情页要求
 
-- How to Turn a Photo into a Bead Pattern
-- Beginner Pin Bead Tips
-- How to Choose the Right Bead Pattern Size
-- Bead Color Chart
-- How to Print and Follow a Bead Pattern
+每个 `/pattern/[patternSlug]` 至少包含：
 
-教程页适合放 AdSense，因为用户阅读时间更长，广告不容易干扰核心工具操作。
+- 图纸标题。
+- 可视预览。
+- 尺寸，例如 `32 x 32 beads`。
+- 难度。
+- 颜色数量。
+- 每种颜色用豆数量。
+- PNG/PDF 下载。
+- 制作提示。
+- 相关图纸。
+- 面包屑。
 
-## 第一批原创图纸计划
+不要批量生成只有图片、没有说明的薄页面。
 
-建议先做 80 个左右：
+## 图纸内容来源
+
+第一批公开图纸建议：
 
 | 分类 | 数量 | 示例 |
 | --- | --- | --- |
-| Animals | 15 | cat, dog, bunny, frog, bird, turtle |
-| Food | 10 | strawberry, pizza, burger, cupcake |
-| Holidays | 15 | pumpkin, ghost, snowman, tree, heart |
-| Cute Icons | 15 | star, rainbow, mushroom, smiley, cloud |
-| Nature | 10 | flower, leaf, sun, moon, mountain |
-| Letters & Numbers | 10 | alphabet starters, digits |
-| Keychains | 5 | small 16x16 printable patterns |
+| Animals | 10 | cat, dog, bunny, frog |
+| Food | 8 | strawberry, pizza, cupcake |
+| Holidays | 8 | pumpkin, snowman, heart |
+| Beginner | 10 | simple icons, small keychains |
+| Cute | 8 | star, rainbow, mushroom |
+| Nature | 6 | flower, leaf, sun |
 
-优先做 beginner-friendly 的 16x16、24x24、32x32 图纸。太大的图纸制作门槛高，前期 SEO 转化也不一定更好。
+优先做 16x16、24x24、32x32 的 beginner-friendly 图纸。
 
 ## AdSense 策略
 
-申请 AdSense 前建议具备：
+申请前建议具备：
 
-- 30-50 个高质量图纸页。
+- 30-50 个高质量图纸详情页。
 - 3-5 篇教程文章。
-- 清晰导航。
-- About 或 Contact 页面。
-- Privacy Policy。
-- Terms。
-- Copyright / DMCA 联系方式。
-- 网站没有大量空白页、测试页、重复页。
+- 首页、图库、分类页结构完整。
+- Privacy Policy、Terms、Contact、Copyright 页面。
+- 没有大量空白页、测试页和重复薄页面。
 
-广告位建议：
+推荐广告位：
 
 - 图纸详情页正文中部。
 - 图纸详情页下载区之后。
 - 分类页列表之间。
 - 教程文章正文中部和底部。
 
-广告位不建议：
+不推荐广告位：
 
+- 编辑器画布旁边。
 - 上传按钮旁边。
-- Generate 按钮旁边。
-- Download 按钮旁边。
+- 生成草稿按钮旁边。
+- 下载按钮旁边。
 - 移动端首屏挤压主功能。
 - 未审核 UGC 页面。
 
-AdSense 相关合规重点：
-
-- Google 要求站点具备高质量、原创、能吸引用户的内容。
-- 只要页面放广告，站长就要负责页面上的用户生成内容符合政策。
-- 隐私政策需要披露 cookies、广告标识符、第三方广告数据使用。
-- 面向 EEA、英国、瑞士等地区用户时，需要考虑 Google 认可的同意管理方案。
-
 ## UGC 审核原则
 
-用户上传生成可以自由做，但公开分享必须审核。
-
-公开分享前需要用户确认：
-
-- I own the rights to this image or pattern.
-- I allow Pinbead to display this pattern publicly.
-- I understand this submission may be reviewed before publishing.
+用户生成内容公开前必须审核。
 
 审核前：
 
@@ -160,46 +177,26 @@ AdSense 相关合规重点：
 - 不允许搜索引擎索引。
 - 不展示 AdSense。
 
-审核要重点拦截：
+重点拦截：
 
 - 明显版权角色。
-- 明星、真人肖像。
+- 明星或真人肖像。
 - 成人、暴力、仇恨、违法内容。
 - 商标和品牌 logo。
 - 低质量重复内容。
 - 垃圾链接和推广内容。
 
-## 内容生产流程
-
-推荐流程：
-
-```text
-Choose topic
--> Create original pixel pattern
--> Generate bead preview
--> Count colors
--> Export PNG/PDF
--> Write unique page copy
--> Add related patterns
--> Publish
--> Submit sitemap
-```
-
-每个图纸保存源数据，方便后续重新生成预览、PDF 或适配不同色卡。
-
 ## 衡量指标
 
 上线后重点看：
 
-- Google indexed pages。
 - Search Console impressions。
-- 工具页上传/生成次数。
-- PNG/PDF 下载次数。
+- Indexed pages。
+- `/editor` 启动次数。
+- `/convert` 上传和草稿生成次数。
 - 图纸详情页点击率。
-- 分类页到详情页点击率。
-- AdSense RPM 和页面体验。
-- 用户是否主动请求保存/分享功能。
-
-如果搜索曝光有增长但点击低，优先优化标题和 meta description。  
-如果工具使用高但分享需求低，继续加强下载和图纸库，不急着做社区。
+- 分类页到图纸页点击率。
+- PNG/PDF 下载次数。
+- AdSense RPM。
+- 用户是否主动请求保存和分享功能。
 

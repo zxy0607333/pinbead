@@ -4,8 +4,17 @@ import {
   beadPalettes,
   defaultBeadPaletteId,
   type BeadPalette,
-  type BeadPaletteColor,
 } from "@/data/bead-palettes";
+import {
+  createBlankPattern,
+  fillPatternConnectedArea,
+  getPatternColorCounts,
+  getPatternColorStats,
+  getPatternFilledCellCount,
+  updatePatternCellColor,
+  type PinbeadPattern,
+  type PinbeadPatternColorStat,
+} from "@/lib/pattern/pattern-model";
 import { useState } from "react";
 
 const canvasSizes = [16, 24, 32, 50];
@@ -18,14 +27,9 @@ const exportTextColor = "#111827";
 const exportMutedTextColor = "#64748b";
 
 type EditorTool = (typeof tools)[number];
-type PatternColorStat = {
-  color: BeadPaletteColor;
-  count: number;
-};
 type EditorPatternExportOptions = {
-  cells: Array<string | null>;
-  canvasSize: number;
-  colorStats: PatternColorStat[];
+  pattern: PinbeadPattern;
+  colorStats: PinbeadPatternColorStat[];
   palette: BeadPalette;
   showColorCodes: boolean;
   showCoordinates: boolean;
@@ -42,71 +46,6 @@ function getDefaultPalette() {
     beadPalettes.find((palette) => palette.id === defaultBeadPaletteId) ??
     beadPalettes[0]
   );
-}
-
-function getNeighborIndexes(index: number, size: number) {
-  const row = Math.floor(index / size);
-  const column = index % size;
-  const neighbors: number[] = [];
-
-  if (row > 0) {
-    neighbors.push(index - size);
-  }
-
-  if (row < size - 1) {
-    neighbors.push(index + size);
-  }
-
-  if (column > 0) {
-    neighbors.push(index - 1);
-  }
-
-  if (column < size - 1) {
-    neighbors.push(index + 1);
-  }
-
-  return neighbors;
-}
-
-function fillConnectedArea(
-  cells: Array<string | null>,
-  startIndex: number,
-  size: number,
-  nextColorId: string | null,
-) {
-  const targetColorId = cells[startIndex];
-
-  if (targetColorId === nextColorId) {
-    return cells;
-  }
-
-  const nextCells = [...cells];
-  const queue = [startIndex];
-  const visited = new Set<number>();
-
-  while (queue.length > 0) {
-    const currentIndex = queue.shift();
-
-    if (currentIndex === undefined || visited.has(currentIndex)) {
-      continue;
-    }
-
-    visited.add(currentIndex);
-
-    if (nextCells[currentIndex] !== targetColorId) {
-      continue;
-    }
-
-    nextCells[currentIndex] = nextColorId;
-
-    for (const neighborIndex of getNeighborIndexes(currentIndex, size)) {
-      if (!visited.has(neighborIndex)) {
-        queue.push(neighborIndex);
-      }
-    }
-  }
-
-  return nextCells;
 }
 
 function getReadableTextColor(hex: string) {
@@ -193,8 +132,8 @@ function formatTimestampForFileName(date: Date) {
   )}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
 }
 
-function getEditorPatternExportFileName(canvasSize: number) {
-  return `pinbead-${canvasSize}x${canvasSize}-${formatTimestampForFileName(
+function getEditorPatternExportFileName(pattern: PinbeadPattern) {
+  return `pinbead-${pattern.width}x${pattern.height}-${formatTimestampForFileName(
     new Date(),
   )}.png`;
 }
@@ -240,22 +179,25 @@ function drawTextWithinWidth(
 }
 
 function renderEditorPatternToCanvas({
-  cells,
-  canvasSize,
   colorStats,
   palette,
+  pattern,
   showColorCodes,
   showCoordinates,
   showGridLines,
 }: EditorPatternExportOptions) {
   const colorMap = new Map(palette.colors.map((color) => [color.id, color]));
-  const cellSize = getExportCellSize(canvasSize, showColorCodes);
+  const cellSize = getExportCellSize(
+    Math.max(pattern.width, pattern.height),
+    showColorCodes,
+  );
   const coordinateSize = showCoordinates ? 36 : 0;
   const padding = 48;
   const headerHeight = 88;
-  const gridSize = canvasSize * cellSize;
-  const boardWidth = gridSize + coordinateSize * 2;
-  const boardHeight = gridSize + coordinateSize * 2;
+  const gridWidth = pattern.width * cellSize;
+  const gridHeight = pattern.height * cellSize;
+  const boardWidth = gridWidth + coordinateSize * 2;
+  const boardHeight = gridHeight + coordinateSize * 2;
   const legendColumns = boardWidth >= 780 ? 2 : 1;
   const legendRows = Math.max(1, Math.ceil(colorStats.length / legendColumns));
   const legendHeaderHeight = 46;
@@ -295,7 +237,7 @@ function renderEditorPatternToCanvas({
   context.fillStyle = exportMutedTextColor;
   context.font = "16px Arial, sans-serif";
   context.fillText(
-    `${canvasSize} x ${canvasSize} grid | ${totalBeads} beads | ${colorStats.length} colors`,
+    `${pattern.width} x ${pattern.height} grid | ${totalBeads} beads | ${colorStats.length} colors`,
     padding,
     padding + 38,
   );
@@ -312,38 +254,43 @@ function renderEditorPatternToCanvas({
 
   if (showCoordinates) {
     context.fillStyle = exportSoftSurfaceColor;
-    context.fillRect(patternX, boardY, gridSize, coordinateSize);
-    context.fillRect(patternX, patternY + gridSize, gridSize, coordinateSize);
-    context.fillRect(boardX, patternY, coordinateSize, gridSize);
-    context.fillRect(patternX + gridSize, patternY, coordinateSize, gridSize);
+    context.fillRect(patternX, boardY, gridWidth, coordinateSize);
+    context.fillRect(patternX, patternY + gridHeight, gridWidth, coordinateSize);
+    context.fillRect(boardX, patternY, coordinateSize, gridHeight);
+    context.fillRect(patternX + gridWidth, patternY, coordinateSize, gridHeight);
 
     context.fillStyle = exportMutedTextColor;
     context.font = "700 14px Arial, sans-serif";
     context.textAlign = "center";
     context.textBaseline = "middle";
 
-    for (let coordinate = 1; coordinate <= canvasSize; coordinate += 1) {
+    for (let coordinate = 1; coordinate <= pattern.width; coordinate += 1) {
       const offset = (coordinate - 1) * cellSize + cellSize / 2;
 
       context.fillText(String(coordinate), patternX + offset, boardY + coordinateSize / 2);
       context.fillText(
         String(coordinate),
         patternX + offset,
-        patternY + gridSize + coordinateSize / 2,
+        patternY + gridHeight + coordinateSize / 2,
       );
+    }
+
+    for (let coordinate = 1; coordinate <= pattern.height; coordinate += 1) {
+      const offset = (coordinate - 1) * cellSize + cellSize / 2;
+
       context.fillText(String(coordinate), boardX + coordinateSize / 2, patternY + offset);
       context.fillText(
         String(coordinate),
-        patternX + gridSize + coordinateSize / 2,
+        patternX + gridWidth + coordinateSize / 2,
         patternY + offset,
       );
     }
   }
 
-  for (let row = 0; row < canvasSize; row += 1) {
-    for (let column = 0; column < canvasSize; column += 1) {
-      const cellIndex = row * canvasSize + column;
-      const colorId = cells[cellIndex];
+  for (let row = 0; row < pattern.height; row += 1) {
+    for (let column = 0; column < pattern.width; column += 1) {
+      const cellIndex = row * pattern.width + column;
+      const colorId = pattern.cells[cellIndex];
       const color = colorId ? colorMap.get(colorId) : null;
       const x = patternX + column * cellSize;
       const y = patternY + row * cellSize;
@@ -365,21 +312,21 @@ function renderEditorPatternToCanvas({
     context.strokeStyle = exportBorderColor;
     context.lineWidth = 1;
 
-    for (let line = 0; line <= canvasSize; line += 1) {
+    for (let line = 0; line <= pattern.width; line += 1) {
       const offset = patternX + line * cellSize + 0.5;
 
       context.beginPath();
       context.moveTo(offset, patternY);
-      context.lineTo(offset, patternY + gridSize);
+      context.lineTo(offset, patternY + gridHeight);
       context.stroke();
     }
 
-    for (let line = 0; line <= canvasSize; line += 1) {
+    for (let line = 0; line <= pattern.height; line += 1) {
       const offset = patternY + line * cellSize + 0.5;
 
       context.beginPath();
       context.moveTo(patternX, offset);
-      context.lineTo(patternX + gridSize, offset);
+      context.lineTo(patternX + gridWidth, offset);
       context.stroke();
     }
   }
@@ -483,9 +430,12 @@ function downloadBlob(blob: Blob, fileName: string) {
 
 export function PatternEditorShell() {
   const palette = getDefaultPalette();
-  const [canvasSize, setCanvasSize] = useState(24);
-  const [cells, setCells] = useState<Array<string | null>>(
-    Array.from({ length: 24 * 24 }, () => null),
+  const [pattern, setPattern] = useState(() =>
+    createBlankPattern({
+      width: 24,
+      height: 24,
+      paletteId: palette.id,
+    }),
   );
   const [activeTool, setActiveTool] = useState<EditorTool>("Brush");
   const [activeColorId, setActiveColorId] = useState(
@@ -501,28 +451,10 @@ export function PatternEditorShell() {
     palette.colors.find((color) => color.id === activeColorId) ??
     palette.colors[0];
   const colorMap = new Map(palette.colors.map((color) => [color.id, color]));
-  const filledCellCount = cells.filter(Boolean).length;
-  const colorCounts = cells.reduce((counts, colorId) => {
-    if (!colorId) {
-      return counts;
-    }
-
-    counts.set(colorId, (counts.get(colorId) ?? 0) + 1);
-    return counts;
-  }, new Map<string, number>());
-  const colorStats = palette.colors
-    .map((color) => ({
-      color,
-      count: colorCounts.get(color.id) ?? 0,
-    }))
-    .filter((stat) => stat.count > 0)
-    .sort((firstStat, secondStat) => {
-      if (secondStat.count !== firstStat.count) {
-        return secondStat.count - firstStat.count;
-      }
-
-      return firstStat.color.code.localeCompare(secondStat.color.code);
-    });
+  const canvasSize = Math.max(pattern.width, pattern.height);
+  const filledCellCount = getPatternFilledCellCount(pattern);
+  const colorCounts = getPatternColorCounts(pattern);
+  const colorStats = getPatternColorStats(pattern, palette);
   const countedBeadCount = colorStats.reduce(
     (total, stat) => total + stat.count,
     0,
@@ -530,15 +462,28 @@ export function PatternEditorShell() {
   const selectedColorCount = activeColor
     ? colorCounts.get(activeColor.id) ?? 0
     : 0;
-  const coordinates = Array.from({ length: canvasSize }, (_, index) => index + 1);
+  const columnCoordinates = Array.from(
+    { length: pattern.width },
+    (_, index) => index + 1,
+  );
+  const rowCoordinates = Array.from(
+    { length: pattern.height },
+    (_, index) => index + 1,
+  );
   const coordinateGutter = showCoordinates ? 28 : 0;
   const cellCodeFontSize = getCellCodeFontSize(canvasSize);
   const coordinateFontSize = getCoordinateFontSize(canvasSize);
   const boardMinWidth = getBoardMinWidth(canvasSize, showColorCodes);
 
   function handleCanvasSizeChange(size: number) {
-    setCanvasSize(size);
-    setCells(Array.from({ length: size * size }, () => null));
+    setPattern(
+      createBlankPattern({
+        width: size,
+        height: size,
+        paletteId: palette.id,
+        title: pattern.title,
+      }),
+    );
   }
 
   function paintCell(index: number) {
@@ -546,37 +491,20 @@ export function PatternEditorShell() {
       return;
     }
 
-    setCells((currentCells) => {
-      if (currentCells[index] === activeColor.id) {
-        return currentCells;
-      }
-
-      const nextCells = [...currentCells];
-      nextCells[index] = activeColor.id;
-      return nextCells;
-    });
+    setPattern((currentPattern) =>
+      updatePatternCellColor(currentPattern, index, activeColor.id),
+    );
   }
 
   function eraseCell(index: number) {
-    setCells((currentCells) => {
-      if (currentCells[index] === null) {
-        return currentCells;
-      }
-
-      const nextCells = [...currentCells];
-      nextCells[index] = null;
-      return nextCells;
-    });
+    setPattern((currentPattern) =>
+      updatePatternCellColor(currentPattern, index, null),
+    );
   }
 
   function fillCell(index: number) {
-    setCells((currentCells) =>
-      fillConnectedArea(
-        currentCells,
-        index,
-        canvasSize,
-        activeColor?.id ?? null,
-      ),
+    setPattern((currentPattern) =>
+      fillPatternConnectedArea(currentPattern, index, activeColor?.id ?? null),
     );
   }
 
@@ -615,17 +543,16 @@ export function PatternEditorShell() {
 
     try {
       const canvas = renderEditorPatternToCanvas({
-        cells,
-        canvasSize,
         colorStats,
         palette,
+        pattern,
         showColorCodes,
         showCoordinates,
         showGridLines,
       });
       const pngBlob = await createPngBlob(canvas);
 
-      downloadBlob(pngBlob, getEditorPatternExportFileName(canvasSize));
+      downloadBlob(pngBlob, getEditorPatternExportFileName(pattern));
     } catch (pngExportError) {
       setExportError(
         pngExportError instanceof Error
@@ -640,10 +567,10 @@ export function PatternEditorShell() {
   const gridBackground = showGridLines ? "var(--border)" : "transparent";
   const gridGap = showGridLines ? "1px" : "0px";
 
-  const gridCells = cells.map((colorId, index) => {
+  const gridCells = pattern.cells.map((colorId, index) => {
     const color = colorId ? colorMap.get(colorId) : null;
-    const row = Math.floor(index / canvasSize) + 1;
-    const column = (index % canvasSize) + 1;
+    const row = Math.floor(index / pattern.width) + 1;
+    const column = (index % pattern.width) + 1;
 
     return (
       <button
@@ -697,15 +624,15 @@ export function PatternEditorShell() {
   const activeColorHex = activeColor?.hex ?? "#ffffff";
 
   const filledPercent = Math.round(
-    (filledCellCount / Math.max(1, cells.length)) * 100,
+    (filledCellCount / Math.max(1, pattern.cells.length)) * 100,
   );
 
   const patternCanvas = (
     <div
-      aria-colcount={canvasSize}
-      aria-label={`${canvasSize} by ${canvasSize} editable bead pattern canvas`}
-      aria-rowcount={canvasSize}
-      className="grid aspect-square overflow-hidden rounded-md border border-[var(--border)] shadow-sm"
+      aria-colcount={pattern.width}
+      aria-label={`${pattern.width} by ${pattern.height} editable bead pattern canvas`}
+      aria-rowcount={pattern.height}
+      className="grid overflow-hidden rounded-md border border-[var(--border)] shadow-sm"
       onPointerCancel={stopDrawing}
       onPointerLeave={stopDrawing}
       onPointerUp={stopDrawing}
@@ -713,7 +640,8 @@ export function PatternEditorShell() {
       style={{
         backgroundColor: gridBackground,
         gap: gridGap,
-        gridTemplateColumns: `repeat(${canvasSize}, minmax(0, 1fr))`,
+        aspectRatio: `${pattern.width} / ${pattern.height}`,
+        gridTemplateColumns: `repeat(${pattern.width}, minmax(0, 1fr))`,
       }}
     >
       {gridCells}
@@ -723,7 +651,7 @@ export function PatternEditorShell() {
   const coordinateLabelClass =
     "flex min-w-0 items-center justify-center overflow-hidden bg-[var(--surface-soft)] font-semibold tabular-nums text-[var(--muted)]";
 
-  function renderCoordinateLabels() {
+  function renderCoordinateLabels(coordinates: number[]) {
     return coordinates.map((coordinate) => (
       <span
         className={coordinateLabelClass}
@@ -750,7 +678,7 @@ export function PatternEditorShell() {
             {canvasSizes.map((size) => (
               <button
                 className={`rounded-md border px-3 py-3 text-sm font-semibold transition ${
-                  canvasSize === size
+                  pattern.width === size && pattern.height === size
                     ? "border-[var(--accent)] bg-[var(--surface-soft)] text-[var(--accent)]"
                     : "border-[var(--border)] bg-white text-[var(--foreground)] hover:border-[var(--accent)]"
                 }`}
@@ -838,7 +766,8 @@ export function PatternEditorShell() {
           <div>
             <h1 className="text-xl font-semibold">Bead Pattern Editor</h1>
             <p className="mt-1 text-sm text-[var(--muted)]">
-              {canvasSize} x {canvasSize} grid, {palette.brand} {palette.name}
+              {pattern.width} x {pattern.height} grid, {palette.brand}{" "}
+              {palette.name}
             </p>
           </div>
           <span className="rounded-full bg-[var(--surface-soft)] px-3 py-1 text-xs font-semibold text-[var(--accent)]">
@@ -864,40 +793,40 @@ export function PatternEditorShell() {
                   aria-hidden="true"
                   className="grid border-x border-t border-[var(--border)]"
                   style={{
-                    gridTemplateColumns: `repeat(${canvasSize}, minmax(0, 1fr))`,
+                    gridTemplateColumns: `repeat(${pattern.width}, minmax(0, 1fr))`,
                   }}
                 >
-                  {renderCoordinateLabels()}
+                  {renderCoordinateLabels(columnCoordinates)}
                 </div>
                 <span aria-hidden="true" />
                 <div
                   aria-hidden="true"
                   className="grid border-y border-l border-[var(--border)]"
                   style={{
-                    gridTemplateRows: `repeat(${canvasSize}, minmax(0, 1fr))`,
+                    gridTemplateRows: `repeat(${pattern.height}, minmax(0, 1fr))`,
                   }}
                 >
-                  {renderCoordinateLabels()}
+                  {renderCoordinateLabels(rowCoordinates)}
                 </div>
                 {patternCanvas}
                 <div
                   aria-hidden="true"
                   className="grid border-y border-r border-[var(--border)]"
                   style={{
-                    gridTemplateRows: `repeat(${canvasSize}, minmax(0, 1fr))`,
+                    gridTemplateRows: `repeat(${pattern.height}, minmax(0, 1fr))`,
                   }}
                 >
-                  {renderCoordinateLabels()}
+                  {renderCoordinateLabels(rowCoordinates)}
                 </div>
                 <span aria-hidden="true" />
                 <div
                   aria-hidden="true"
                   className="grid border-x border-b border-[var(--border)]"
                   style={{
-                    gridTemplateColumns: `repeat(${canvasSize}, minmax(0, 1fr))`,
+                    gridTemplateColumns: `repeat(${pattern.width}, minmax(0, 1fr))`,
                   }}
                 >
-                  {renderCoordinateLabels()}
+                  {renderCoordinateLabels(columnCoordinates)}
                 </div>
                 <span aria-hidden="true" />
               </div>
@@ -968,13 +897,13 @@ export function PatternEditorShell() {
             <div className="flex justify-between gap-3 rounded-md bg-[var(--surface-soft)] px-3 py-2">
               <span className="text-[var(--muted)]">Canvas</span>
               <span className="font-semibold">
-                {canvasSize} x {canvasSize}
+                {pattern.width} x {pattern.height}
               </span>
             </div>
             <div className="flex justify-between gap-3 rounded-md bg-[var(--surface-soft)] px-3 py-2">
               <span className="text-[var(--muted)]">Total beads</span>
               <span className="font-semibold">
-                {countedBeadCount} / {cells.length}
+                {countedBeadCount} / {pattern.cells.length}
               </span>
             </div>
             <div className="flex justify-between gap-3 rounded-md bg-[var(--surface-soft)] px-3 py-2">

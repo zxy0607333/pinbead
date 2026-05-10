@@ -9,6 +9,10 @@ import {
   type PreparedBeadPalette,
   type PreparedBeadPaletteColor,
 } from "@/lib/bead-color-matching";
+import {
+  createPattern,
+  type PinbeadPattern,
+} from "@/lib/pattern/pattern-model";
 import { useEffect, useId, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 
@@ -62,6 +66,7 @@ type PixelPattern = PatternSize & {
   matchedColors: MatchedPatternColor[];
   paletteId: string;
   paletteName: string;
+  pattern: PinbeadPattern;
   selectedColorLimit: number;
   effectiveColorLimit: number;
   originalColorCount: number;
@@ -455,6 +460,14 @@ async function createPixelPattern(
       palette,
       maxColors,
     );
+    const pattern = createPattern({
+      width: patternSize.width,
+      height: patternSize.height,
+      paletteId: palette.id,
+      source: "image-draft",
+      title: "Image draft",
+      cells: reducedPattern.colorIds,
+    });
     const cells = reducedPattern.colorIds.map((colorId) => {
       const matchedColor = paletteColorsById.get(colorId);
 
@@ -484,6 +497,7 @@ async function createPixelPattern(
       matchedColors,
       paletteId: palette.id,
       paletteName: `${palette.brand} ${palette.name}`,
+      pattern,
       selectedColorLimit: maxColors,
       effectiveColorLimit: reducedPattern.effectiveMaxColors,
       originalColorCount: reducedPattern.originalUsedColorCount,
@@ -536,7 +550,7 @@ export function HomePatternMaker() {
       )
     : 0;
   const beadCountMatchesPreview = pixelPattern
-    ? totalBeadCount === pixelPattern.cells.length
+    ? totalBeadCount === pixelPattern.pattern.cells.length
     : false;
 
   useEffect(() => {
@@ -958,7 +972,7 @@ export function HomePatternMaker() {
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[var(--accent)]">
                   {pixelPattern
-                    ? `${pixelPattern.cells.length} cells`
+                    ? `${pixelPattern.pattern.cells.length} cells`
                     : "Preparing"}
                 </span>
                 <button
@@ -1074,16 +1088,16 @@ export function HomePatternMaker() {
 
             {pixelPattern && !pixelError ? (
               <div
-                aria-label={`${previewMode === "beads" ? "Round bead" : "Pixel"} preview for a ${pixelPattern.width} by ${pixelPattern.height} bead pattern using ${pixelPattern.paletteName}${showGridLines ? " with grid lines" : ""}`}
+                aria-label={`${previewMode === "beads" ? "Round bead" : "Pixel"} preview for a ${pixelPattern.pattern.width} by ${pixelPattern.pattern.height} bead pattern using ${pixelPattern.paletteName}${showGridLines ? " with grid lines" : ""}`}
                 className="mx-auto mt-4 grid w-full max-w-[300px] overflow-hidden rounded-md border border-[var(--border)] shadow-sm sm:max-w-[360px]"
                 role="img"
                 style={{
-                  aspectRatio: `${pixelPattern.width} / ${pixelPattern.height}`,
+                  aspectRatio: `${pixelPattern.pattern.width} / ${pixelPattern.pattern.height}`,
                   backgroundColor: showGridLines
                     ? "var(--border)"
                     : "var(--surface)",
                   gap: showGridLines ? "1px" : "0px",
-                  gridTemplateColumns: `repeat(${pixelPattern.width}, minmax(0, 1fr))`,
+                  gridTemplateColumns: `repeat(${pixelPattern.pattern.width}, minmax(0, 1fr))`,
                 }}
               >
                 {pixelPattern.cells.map((color, index) => (
@@ -1143,7 +1157,7 @@ export function HomePatternMaker() {
                     {totalBeadCount}
                   </p>
                   <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
-                    {pixelPattern.width} x {pixelPattern.height} pattern grid
+                    {pixelPattern.pattern.width} x {pixelPattern.pattern.height} pattern grid
                   </p>
                 </div>
 

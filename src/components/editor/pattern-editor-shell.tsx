@@ -8,6 +8,7 @@ import {
   getReadableTextColor,
   renderEditorPatternToCanvas,
 } from "@/lib/pattern/pattern-export";
+import { consumeEditorDraftPattern } from "@/lib/pattern/pattern-draft-storage";
 import {
   createBlankPattern,
   fillPatternConnectedArea,
@@ -16,7 +17,7 @@ import {
   getPatternFilledCellCount,
   updatePatternCellColor,
 } from "@/lib/pattern/pattern-model";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const canvasSizes = [16, 24, 32, 50];
 const tools = ["Brush", "Eraser", "Fill"] as const;
@@ -101,24 +102,30 @@ function ViewToggleButton({ isActive, label, onClick }: ViewToggleButtonProps) {
 }
 
 export function PatternEditorShell() {
-  const palette = getDefaultPalette();
+  const initialPalette = getDefaultPalette();
   const [pattern, setPattern] = useState(() =>
     createBlankPattern({
       width: 24,
       height: 24,
-      paletteId: palette.id,
+      paletteId: initialPalette.id,
     }),
   );
   const [activeTool, setActiveTool] = useState<EditorTool>("Brush");
   const [activeColorId, setActiveColorId] = useState(
-    palette.colors[0]?.id ?? "",
+    initialPalette.colors[0]?.id ?? "",
   );
   const [isDrawing, setIsDrawing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState("");
+  const [draftStatus, setDraftStatus] = useState<
+    "idle" | "loaded" | "missing"
+  >("idle");
   const [showGridLines, setShowGridLines] = useState(true);
   const [showCoordinates, setShowCoordinates] = useState(true);
   const [showColorCodes, setShowColorCodes] = useState(true);
+  const palette =
+    beadPalettes.find((beadPalette) => beadPalette.id === pattern.paletteId) ??
+    initialPalette;
   const activeColor =
     palette.colors.find((color) => color.id === activeColorId) ??
     palette.colors[0];
@@ -146,6 +153,39 @@ export function PatternEditorShell() {
   const cellCodeFontSize = getCellCodeFontSize(canvasSize);
   const coordinateFontSize = getCoordinateFontSize(canvasSize);
   const boardMinWidth = getBoardMinWidth(canvasSize, showColorCodes);
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+
+    if (!searchParams.has("draft")) {
+      return;
+    }
+
+    const draftPattern = consumeEditorDraftPattern();
+
+    if (!draftPattern) {
+      window.history.replaceState(null, "", window.location.pathname);
+      queueMicrotask(() => setDraftStatus("missing"));
+      return;
+    }
+
+    const draftPalette =
+      beadPalettes.find(
+        (beadPalette) => beadPalette.id === draftPattern.paletteId,
+      ) ?? initialPalette;
+    const firstDraftColorId = draftPattern.cells.find(
+      (cell): cell is string =>
+        typeof cell === "string" &&
+        draftPalette.colors.some((color) => color.id === cell),
+    );
+
+    window.history.replaceState(null, "", window.location.pathname);
+    queueMicrotask(() => {
+      setPattern(draftPattern);
+      setActiveColorId(firstDraftColorId ?? draftPalette.colors[0]?.id ?? "");
+      setDraftStatus("loaded");
+    });
+  }, [initialPalette]);
 
   function handleCanvasSizeChange(size: number) {
     setPattern(
@@ -446,6 +486,19 @@ export function PatternEditorShell() {
             {activeTool} / {activeColor?.code}
           </span>
         </div>
+
+        {draftStatus === "loaded" ? (
+          <div className="mt-4 rounded-md border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-3 text-sm leading-6 text-[var(--muted)]">
+            Image draft loaded. Refine outlines, faces, and color choices here
+            before exporting the final pattern.
+          </div>
+        ) : null}
+        {draftStatus === "missing" ? (
+          <div className="mt-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-700">
+            The temporary image draft was not found. Start a new conversion or
+            continue with a blank pattern.
+          </div>
+        ) : null}
 
         <div className="mt-5 overflow-auto pb-2">
           <div

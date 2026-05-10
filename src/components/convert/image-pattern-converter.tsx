@@ -16,6 +16,7 @@ import {
   type ImageDraftPattern,
   type ImagePreview,
 } from "@/lib/pattern/image-to-pattern";
+import { saveEditorDraftPattern } from "@/lib/pattern/pattern-draft-storage";
 import {
   createPngBlob,
   downloadBlob,
@@ -23,6 +24,7 @@ import {
   renderConvertedPatternPreviewToCanvas,
   type ConvertedPatternPreviewMode,
 } from "@/lib/pattern/pattern-export";
+import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 
@@ -31,6 +33,7 @@ const colorCountOptions = [8, 16, 24, 32];
 const defaultColorLimit = 24;
 
 export function ImagePatternConverter() {
+  const router = useRouter();
   const fileInputId = useId();
   const previewRequestId = useRef(0);
   const pixelRequestId = useRef(0);
@@ -38,6 +41,7 @@ export function ImagePatternConverter() {
   const [pixelPattern, setPixelPattern] =
     useState<ImageDraftPattern | null>(null);
   const [error, setError] = useState("");
+  const [openEditorError, setOpenEditorError] = useState("");
   const [exportError, setExportError] = useState("");
   const [isPreparing, setIsPreparing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -99,6 +103,7 @@ export function ImagePatternConverter() {
 
       if (pixelRequestId.current === requestId) {
         setPixelPattern(null);
+        setOpenEditorError("");
         setIsPixelating(true);
         setPixelError("");
       }
@@ -233,6 +238,23 @@ export function ImagePatternConverter() {
       );
     } finally {
       setIsExporting(false);
+    }
+  }
+
+  function handleOpenInEditor() {
+    if (!pixelPattern) {
+      return;
+    }
+
+    setOpenEditorError("");
+
+    try {
+      saveEditorDraftPattern(pixelPattern.pattern);
+      router.push("/editor?draft=1");
+    } catch {
+      setOpenEditorError(
+        "This draft could not be opened in the editor. Please try a smaller pattern.",
+      );
     }
   }
 
@@ -497,6 +519,14 @@ export function ImagePatternConverter() {
                     : "Preparing"}
                 </span>
                 <button
+                  className="rounded-full border border-[var(--accent)] bg-[var(--accent)] px-3 py-2 text-xs font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={!pixelPattern || isPixelating}
+                  onClick={handleOpenInEditor}
+                  type="button"
+                >
+                  Open in editor
+                </button>
+                <button
                   className="rounded-full border border-[var(--border)] bg-white px-3 py-2 text-xs font-semibold text-[var(--foreground)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
                   disabled={!pixelPattern || isExporting || isPixelating}
                   onClick={handlePngExport}
@@ -525,10 +555,19 @@ export function ImagePatternConverter() {
                   {exportError}
                 </p>
               ) : null}
-              {!isPixelating && !pixelError && !exportError && pixelPattern ? (
+              {openEditorError ? (
+                <p className="text-sm font-medium text-[var(--accent-strong)]">
+                  {openEditorError}
+                </p>
+              ) : null}
+              {!isPixelating &&
+              !pixelError &&
+              !exportError &&
+              !openEditorError &&
+              pixelPattern ? (
                 <p className="text-sm leading-6 text-[var(--muted)]">
-                  PNG export uses the active preview mode and current grid-line
-                  setting.
+                  Editable draft ready. Open it in the editor to refine shapes,
+                  outlines, and colors before exporting a final pattern.
                 </p>
               ) : null}
             </div>

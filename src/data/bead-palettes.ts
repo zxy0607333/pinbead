@@ -4,6 +4,7 @@ export type BeadPaletteColor = {
   code: string;
   name: string;
   hex: string;
+  family?: string;
 };
 
 export type BeadPalette = {
@@ -14,7 +15,272 @@ export type BeadPalette = {
   colors: BeadPaletteColor[];
 };
 
+type FixedMarketColor = {
+  family: string;
+  hex: string;
+  name: string;
+};
+
+type HueSeriesConfig = {
+  family: string;
+  hueEnd: number;
+  hueStart: number;
+  lightnesses: number[];
+  prefix: string;
+  saturations: number[];
+  count: number;
+  wrapHue?: boolean;
+};
+
+const toneNames = [
+  "Deep",
+  "Dark",
+  "Rich",
+  "Classic",
+  "Bright",
+  "Light",
+  "Soft",
+  "Pale",
+];
+
+function normalizeHue(hue: number) {
+  return ((hue % 360) + 360) % 360;
+}
+
+function hslToHex(hue: number, saturation: number, lightness: number) {
+  const normalizedHue = normalizeHue(hue);
+  const normalizedSaturation = saturation / 100;
+  const normalizedLightness = lightness / 100;
+  const chroma =
+    (1 - Math.abs(2 * normalizedLightness - 1)) * normalizedSaturation;
+  const hueSegment = normalizedHue / 60;
+  const x = chroma * (1 - Math.abs((hueSegment % 2) - 1));
+  const match = normalizedLightness - chroma / 2;
+  let red = 0;
+  let green = 0;
+  let blue = 0;
+
+  if (hueSegment >= 0 && hueSegment < 1) {
+    red = chroma;
+    green = x;
+  } else if (hueSegment >= 1 && hueSegment < 2) {
+    red = x;
+    green = chroma;
+  } else if (hueSegment >= 2 && hueSegment < 3) {
+    green = chroma;
+    blue = x;
+  } else if (hueSegment >= 3 && hueSegment < 4) {
+    green = x;
+    blue = chroma;
+  } else if (hueSegment >= 4 && hueSegment < 5) {
+    red = x;
+    blue = chroma;
+  } else {
+    red = chroma;
+    blue = x;
+  }
+
+  const toHex = (channel: number) =>
+    Math.round((channel + match) * 255)
+      .toString(16)
+      .padStart(2, "0");
+
+  return `#${toHex(red)}${toHex(green)}${toHex(blue)}`;
+}
+
+function createMarketColor(
+  color: FixedMarketColor,
+  index: number,
+): BeadPaletteColor {
+  const codeNumber = String(index + 1).padStart(3, "0");
+
+  return {
+    id: `pinbead-market-${codeNumber}`,
+    brand: "Pinbead",
+    code: `P${index + 1}`,
+    family: color.family,
+    name: color.name,
+    hex: color.hex,
+  };
+}
+
+function createFixedColors(colors: FixedMarketColor[]) {
+  return colors;
+}
+
+function createHueSeries(config: HueSeriesConfig): FixedMarketColor[] {
+  return Array.from({ length: config.count }, (_, index) => {
+    const progress = config.count === 1 ? 0 : index / (config.count - 1);
+    let hueDelta = config.hueEnd - config.hueStart;
+
+    if (config.wrapHue && Math.abs(hueDelta) > 180) {
+      hueDelta += hueDelta > 0 ? -360 : 360;
+    }
+
+    const hue = config.hueStart + hueDelta * progress;
+    const saturation = config.saturations[index % config.saturations.length];
+    const lightness = config.lightnesses[index % config.lightnesses.length];
+    const tone = toneNames[index % toneNames.length];
+    const batch = Math.floor(index / toneNames.length) + 1;
+
+    return {
+      family: config.family,
+      name: `${tone} ${config.prefix} ${batch}`,
+      hex: hslToHex(hue, saturation, lightness),
+    };
+  });
+}
+
+const marketPaletteColorSeeds: FixedMarketColor[] = [
+  ...createFixedColors([
+    { family: "Neutral", name: "Black", hex: "#111111" },
+    { family: "Neutral", name: "Soft Black", hex: "#252525" },
+    { family: "Neutral", name: "Charcoal", hex: "#3c3f42" },
+    { family: "Neutral", name: "Dark Gray", hex: "#565a5d" },
+    { family: "Neutral", name: "Steel Gray", hex: "#70757a" },
+    { family: "Neutral", name: "Medium Gray", hex: "#8a9094" },
+    { family: "Neutral", name: "Warm Gray", hex: "#9c9991" },
+    { family: "Neutral", name: "Light Gray", hex: "#b7bbbd" },
+    { family: "Neutral", name: "Silver", hex: "#c7c9c8" },
+    { family: "Neutral", name: "Pale Gray", hex: "#d8dcdb" },
+    { family: "Neutral", name: "Frost", hex: "#e9eeee" },
+    { family: "Neutral", name: "Soft White", hex: "#f5f4ef" },
+    { family: "Neutral", name: "White", hex: "#fbfbf7" },
+    { family: "Neutral", name: "Cream", hex: "#f2e8c7" },
+    { family: "Neutral", name: "Ivory", hex: "#fff3d7" },
+    { family: "Neutral", name: "Pearl White", hex: "#eee6dc" },
+    { family: "Neutral", name: "Glow White", hex: "#eff4d2" },
+    { family: "Neutral", name: "Clear Frost", hex: "#edf7ff" },
+  ]),
+  ...createHueSeries({
+    family: "Red",
+    hueStart: 348,
+    hueEnd: 8,
+    lightnesses: [26, 34, 43, 52, 62, 72],
+    prefix: "Red",
+    saturations: [78, 88, 66],
+    count: 18,
+    wrapHue: true,
+  }),
+  ...createHueSeries({
+    family: "Orange",
+    hueStart: 14,
+    hueEnd: 35,
+    lightnesses: [28, 36, 45, 54, 64, 74, 82, 48],
+    prefix: "Orange",
+    saturations: [82, 92, 70, 58],
+    count: 16,
+  }),
+  ...createHueSeries({
+    family: "Yellow",
+    hueStart: 43,
+    hueEnd: 60,
+    lightnesses: [34, 42, 50, 60, 70, 80, 86, 54],
+    prefix: "Yellow",
+    saturations: [72, 88, 96, 58],
+    count: 16,
+  }),
+  ...createHueSeries({
+    family: "Green",
+    hueStart: 82,
+    hueEnd: 150,
+    lightnesses: [22, 30, 38, 47, 58, 68],
+    prefix: "Green",
+    saturations: [50, 68, 82, 58],
+    count: 24,
+  }),
+  ...createHueSeries({
+    family: "Teal",
+    hueStart: 158,
+    hueEnd: 188,
+    lightnesses: [24, 32, 42, 52, 64, 74],
+    prefix: "Teal",
+    saturations: [52, 70, 84],
+    count: 18,
+  }),
+  ...createHueSeries({
+    family: "Blue",
+    hueStart: 195,
+    hueEnd: 235,
+    lightnesses: [24, 32, 42, 52, 64, 76],
+    prefix: "Blue",
+    saturations: [56, 76, 88, 64],
+    count: 24,
+  }),
+  ...createHueSeries({
+    family: "Purple",
+    hueStart: 250,
+    hueEnd: 286,
+    lightnesses: [25, 34, 44, 54, 66],
+    prefix: "Purple",
+    saturations: [48, 66, 82, 58],
+    count: 20,
+  }),
+  ...createHueSeries({
+    family: "Pink",
+    hueStart: 304,
+    hueEnd: 342,
+    lightnesses: [31, 40, 50, 60, 72],
+    prefix: "Pink",
+    saturations: [56, 74, 90, 64],
+    count: 20,
+  }),
+  ...createHueSeries({
+    family: "Brown",
+    hueStart: 18,
+    hueEnd: 38,
+    lightnesses: [20, 28, 36, 45, 56, 68],
+    prefix: "Brown",
+    saturations: [28, 42, 55],
+    count: 18,
+  }),
+  ...createFixedColors([
+    { family: "Skin", name: "Porcelain Skin", hex: "#f8dccc" },
+    { family: "Skin", name: "Fair Skin", hex: "#f0c8b5" },
+    { family: "Skin", name: "Peach Skin", hex: "#e9ad94" },
+    { family: "Skin", name: "Warm Peach", hex: "#d99072" },
+    { family: "Skin", name: "Tan Skin", hex: "#bf765d" },
+    { family: "Skin", name: "Caramel Skin", hex: "#a95f45" },
+    { family: "Skin", name: "Amber Skin", hex: "#8f5039" },
+    { family: "Skin", name: "Chestnut Skin", hex: "#744031" },
+    { family: "Skin", name: "Deep Skin", hex: "#563126" },
+    { family: "Skin", name: "Rosy Skin", hex: "#f0b3aa" },
+    { family: "Skin", name: "Blush Skin", hex: "#f6c7c3" },
+    { family: "Skin", name: "Sienna Skin", hex: "#9d5b43" },
+  ]),
+  ...createHueSeries({
+    family: "Pastel",
+    hueStart: 0,
+    hueEnd: 330,
+    lightnesses: [78, 82, 86, 88, 80, 84, 90],
+    prefix: "Pastel",
+    saturations: [38, 46, 54, 42],
+    count: 14,
+  }),
+  ...createFixedColors([
+    { family: "Neon", name: "Neon Red", hex: "#ff2851" },
+    { family: "Neon", name: "Neon Orange", hex: "#ff7a00" },
+    { family: "Neon", name: "Neon Yellow", hex: "#eaff00" },
+    { family: "Neon", name: "Neon Green", hex: "#39ff14" },
+    { family: "Neon", name: "Neon Cyan", hex: "#00f0ff" },
+    { family: "Neon", name: "Neon Blue", hex: "#2f55ff" },
+    { family: "Neon", name: "Neon Pink", hex: "#ff42cc" },
+  ]),
+];
+
+const marketPaletteColors = marketPaletteColorSeeds.map((color, index) =>
+  createMarketColor(color, index),
+);
+
 export const beadPalettes: BeadPalette[] = [
+  {
+    id: "pinbead-market-225",
+    brand: "Pinbead",
+    name: "Market 225 Palette",
+    description:
+      "A 225-color working palette inspired by large retail fuse bead assortments, grouped for pattern editing and photo conversion.",
+    colors: marketPaletteColors,
+  },
   {
     id: "pinbead-starter",
     brand: "Pinbead",
@@ -250,4 +516,4 @@ export const beadPalettes: BeadPalette[] = [
   },
 ];
 
-export const defaultBeadPaletteId = beadPalettes[0]?.id ?? "pinbead-starter";
+export const defaultBeadPaletteId = "pinbead-market-225";

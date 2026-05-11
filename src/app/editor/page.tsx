@@ -1,6 +1,5 @@
 import { PatternEditorShell } from "@/components/editor/pattern-editor-shell";
 import type { Metadata } from "next";
-import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Bead Pattern Editor",
@@ -10,28 +9,8 @@ export const metadata: Metadata = {
 
 export default function EditorPage() {
   return (
-    <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
-      <div className="mx-auto w-full max-w-7xl px-5 py-6 md:px-8">
-        <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
-          <Link className="text-lg font-semibold" href="/">
-            Pinbead
-          </Link>
-          <nav className="flex flex-wrap gap-3 text-sm font-semibold">
-            <Link
-              className="rounded-md border border-[var(--border)] bg-white px-3 py-2 transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
-              href="/convert"
-            >
-              Import image
-            </Link>
-            <Link
-              className="rounded-md border border-[var(--border)] bg-white px-3 py-2 transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
-              href="/patterns"
-            >
-              Patterns
-            </Link>
-          </nav>
-        </header>
-
+    <main className="min-h-dvh bg-[var(--background)] text-[var(--foreground)] xl:h-dvh xl:overflow-hidden">
+      <div className="mx-auto flex min-h-dvh w-full max-w-none flex-col xl:h-full xl:min-h-0">
         <PatternEditorShell />
       </div>
     </main>

@@ -17,12 +17,53 @@ import {
   getPatternFilledCellCount,
   updatePatternCellColor,
 } from "@/lib/pattern/pattern-model";
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
+import type { MouseEvent, PointerEvent } from "react";
 
-const canvasSizes = [16, 24, 32, 50];
-const tools = ["Brush", "Eraser", "Fill"] as const;
+const canvasSizes = [16, 24, 32, 48, 64];
+const minViewportScale = 0.35;
+const maxViewportScale = 3;
+const editorTools = [
+  {
+    id: "Hand",
+    label: "Hand",
+    shortcut: "H",
+    hint: "Pan the canvas stage.",
+  },
+  {
+    id: "Brush",
+    label: "Brush",
+    shortcut: "B",
+    hint: "Paint cells with the selected bead color.",
+  },
+  {
+    id: "Eraser",
+    label: "Eraser",
+    shortcut: "E",
+    hint: "Clear beads from cells without changing the selected color.",
+  },
+  {
+    id: "Fill",
+    label: "Fill",
+    shortcut: "F",
+    hint: "Flood-fill a connected area with the selected bead color.",
+  },
+] as const;
 
-type EditorTool = (typeof tools)[number];
+type EditorTool = (typeof editorTools)[number]["id"];
+type EditorViewport = {
+  offsetX: number;
+  offsetY: number;
+  scale: number;
+};
+type PanDragState = {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  startOffsetX: number;
+  startOffsetY: number;
+};
 type ViewToggleButtonProps = {
   isActive: boolean;
   label: string;
@@ -37,11 +78,11 @@ function getDefaultPalette() {
 }
 function getCellCodeFontSize(size: number) {
   if (size >= 50) {
-    return 5;
+    return 8;
   }
 
   if (size >= 32) {
-    return 7;
+    return 8;
   }
 
   if (size >= 24) {
@@ -65,18 +106,17 @@ function getCoordinateFontSize(size: number) {
 
 function getBoardMinWidth(size: number, showColorCodes: boolean) {
   if (!showColorCodes) {
-    return size >= 50 ? 620 : 420;
+    return size >= 50 ? 620 : size >= 32 ? 520 : 420;
   }
 
-  if (size >= 32) {
-    return 760;
-  }
+  const minimumCellWidth =
+    size >= 50 ? 34 : size >= 32 ? 30 : size >= 24 ? 28 : 32;
 
-  if (size >= 24) {
-    return 720;
-  }
+  return Math.max(560, size * minimumCellWidth + 64);
+}
 
-  return 560;
+function clampViewportScale(scale: number) {
+  return Math.min(maxViewportScale, Math.max(minViewportScale, scale));
 }
 
 function ViewToggleButton({ isActive, label, onClick }: ViewToggleButtonProps) {
@@ -103,6 +143,15 @@ function ViewToggleButton({ isActive, label, onClick }: ViewToggleButtonProps) {
 
 export function PatternEditorShell() {
   const initialPalette = getDefaultPalette();
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const patternCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const hoverCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const hoveredCellIndexRef = useRef<number | null>(null);
+  const panDragRef = useRef<PanDragState | null>(null);
+  const panFrameRef = useRef<number | null>(null);
+  const pendingViewportRef = useRef<EditorViewport | null>(null);
+  const isDrawingRef = useRef(false);
+  const drawingPointerIdRef = useRef<number | null>(null);
   const [pattern, setPattern] = useState(() =>
     createBlankPattern({
       width: 24,
@@ -114,7 +163,6 @@ export function PatternEditorShell() {
   const [activeColorId, setActiveColorId] = useState(
     initialPalette.colors[0]?.id ?? "",
   );
-  const [isDrawing, setIsDrawing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState("");
   const [draftStatus, setDraftStatus] = useState<
@@ -123,13 +171,23 @@ export function PatternEditorShell() {
   const [showGridLines, setShowGridLines] = useState(true);
   const [showCoordinates, setShowCoordinates] = useState(true);
   const [showColorCodes, setShowColorCodes] = useState(true);
+  const [colorSearch, setColorSearch] = useState("");
+  const [selectedColorFamily, setSelectedColorFamily] = useState("All");
+  const [showUsedColorsOnly, setShowUsedColorsOnly] = useState(false);
+  const [hoveredCellIndex, setHoveredCellIndex] = useState<number | null>(null);
+  const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false);
+  const [viewport, setViewport] = useState<EditorViewport>({
+    offsetX: 0,
+    offsetY: 0,
+    scale: 1,
+  });
+  const [panDrag, setPanDrag] = useState<PanDragState | null>(null);
   const palette =
     beadPalettes.find((beadPalette) => beadPalette.id === pattern.paletteId) ??
     initialPalette;
   const activeColor =
     palette.colors.find((color) => color.id === activeColorId) ??
     palette.colors[0];
-  const colorMap = new Map(palette.colors.map((color) => [color.id, color]));
   const canvasSize = Math.max(pattern.width, pattern.height);
   const filledCellCount = getPatternFilledCellCount(pattern);
   const colorCounts = getPatternColorCounts(pattern);
@@ -141,18 +199,135 @@ export function PatternEditorShell() {
   const selectedColorCount = activeColor
     ? colorCounts.get(activeColor.id) ?? 0
     : 0;
-  const columnCoordinates = Array.from(
-    { length: pattern.width },
-    (_, index) => index + 1,
-  );
-  const rowCoordinates = Array.from(
-    { length: pattern.height },
-    (_, index) => index + 1,
-  );
   const coordinateGutter = showCoordinates ? 28 : 0;
   const cellCodeFontSize = getCellCodeFontSize(canvasSize);
   const coordinateFontSize = getCoordinateFontSize(canvasSize);
-  const boardMinWidth = getBoardMinWidth(canvasSize, showColorCodes);
+  const shouldRenderCellCodes = showColorCodes;
+  const boardMinWidth = getBoardMinWidth(canvasSize, shouldRenderCellCodes);
+  const canvasBoardWidth = boardMinWidth;
+  const canvasCellSize =
+    (canvasBoardWidth - coordinateGutter * 2) / pattern.width;
+  const canvasBoardHeight =
+    pattern.height * canvasCellSize + coordinateGutter * 2;
+  const colorFamilies = [
+    "All",
+    ...Array.from(
+      new Set(palette.colors.map((color) => color.family ?? "Other")),
+    ),
+  ];
+  const normalizedColorSearch = colorSearch.trim().toLowerCase();
+  const visiblePaletteColors = palette.colors.filter((color) => {
+    const matchesFamily =
+      selectedColorFamily === "All" ||
+      (color.family ?? "Other") === selectedColorFamily;
+    const matchesUsed =
+      !showUsedColorsOnly || (colorCounts.get(color.id) ?? 0) > 0;
+    const matchesSearch =
+      !normalizedColorSearch ||
+      `${color.code} ${color.name} ${color.hex} ${color.family ?? ""}`
+        .toLowerCase()
+        .includes(normalizedColorSearch);
+
+    return matchesFamily && matchesUsed && matchesSearch;
+  });
+  const hoveredCellColorId =
+    hoveredCellIndex === null ? null : pattern.cells[hoveredCellIndex];
+  const hoveredCellColor = hoveredCellColorId
+    ? palette.colors.find((color) => color.id === hoveredCellColorId)
+    : null;
+  const hoveredCellRow =
+    hoveredCellIndex === null
+      ? null
+      : Math.floor(hoveredCellIndex / pattern.width) + 1;
+  const hoveredCellColumn =
+    hoveredCellIndex === null ? null : (hoveredCellIndex % pattern.width) + 1;
+
+  function cancelPendingPanFrame() {
+    if (panFrameRef.current !== null) {
+      window.cancelAnimationFrame(panFrameRef.current);
+      panFrameRef.current = null;
+    }
+
+    pendingViewportRef.current = null;
+  }
+
+  function scheduleViewportUpdate(nextViewport: EditorViewport) {
+    pendingViewportRef.current = nextViewport;
+
+    if (panFrameRef.current !== null) {
+      return;
+    }
+
+    panFrameRef.current = window.requestAnimationFrame(() => {
+      panFrameRef.current = null;
+
+      if (!pendingViewportRef.current) {
+        return;
+      }
+
+      const pendingViewport = pendingViewportRef.current;
+      pendingViewportRef.current = null;
+      setViewport(pendingViewport);
+    });
+  }
+
+  function drawHoverOverlay(cellIndex: number | null) {
+    const canvas = hoverCanvasRef.current;
+
+    if (!canvas) {
+      return;
+    }
+
+    const pixelRatio = Math.min(2, window.devicePixelRatio || 1);
+    const canvasWidth = Math.round(canvasBoardWidth * pixelRatio);
+    const canvasHeight = Math.round(canvasBoardHeight * pixelRatio);
+    const context = canvas.getContext("2d", {
+      alpha: true,
+      willReadFrequently: false,
+    });
+
+    if (!context) {
+      return;
+    }
+
+    if (canvas.width !== canvasWidth || canvas.height !== canvasHeight) {
+      canvas.width = canvasWidth;
+      canvas.height = canvasHeight;
+      canvas.style.width = `${canvasBoardWidth}px`;
+      canvas.style.height = `${canvasBoardHeight}px`;
+    }
+
+    context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    context.clearRect(0, 0, canvasBoardWidth, canvasBoardHeight);
+
+    if (cellIndex === null) {
+      return;
+    }
+
+    const hoveredColumn = cellIndex % pattern.width;
+    const hoveredRow = Math.floor(cellIndex / pattern.width);
+
+    context.strokeStyle = "#24786a";
+    context.lineWidth = 2;
+    context.strokeRect(
+      coordinateGutter + hoveredColumn * canvasCellSize + 1,
+      coordinateGutter + hoveredRow * canvasCellSize + 1,
+      canvasCellSize - 2,
+      canvasCellSize - 2,
+    );
+  }
+
+  function setHoveredCanvasCellIndex(nextCellIndex: number | null) {
+    if (hoveredCellIndexRef.current === nextCellIndex) {
+      return;
+    }
+
+    hoveredCellIndexRef.current = nextCellIndex;
+    drawHoverOverlay(nextCellIndex);
+    setHoveredCellIndex(nextCellIndex);
+  }
+
+  useEffect(() => () => cancelPendingPanFrame(), []);
 
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
@@ -187,7 +362,288 @@ export function PatternEditorShell() {
     });
   }, [initialPalette]);
 
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      const targetTagName = target?.tagName.toLowerCase();
+
+      if (
+        target?.isContentEditable ||
+        targetTagName === "input" ||
+        targetTagName === "select" ||
+        targetTagName === "textarea"
+      ) {
+        return;
+      }
+
+      const matchingTool = editorTools.find(
+        (tool) => tool.shortcut.toLowerCase() === event.key.toLowerCase(),
+      );
+
+      if (matchingTool) {
+        event.preventDefault();
+        setActiveTool(matchingTool.id);
+        return;
+      }
+
+      if (event.key === "Escape") {
+        isDrawingRef.current = false;
+        drawingPointerIdRef.current = null;
+        panDragRef.current = null;
+        cancelPendingPanFrame();
+        setPanDrag(null);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
+  useEffect(() => {
+    const stageElement = stageRef.current;
+
+    if (!stageElement) {
+      return;
+    }
+
+    const wheelTarget: HTMLDivElement = stageElement;
+
+    function handleWheel(event: WheelEvent) {
+      if (!event.ctrlKey) {
+        return;
+      }
+
+      event.preventDefault();
+      panDragRef.current = null;
+      cancelPendingPanFrame();
+      setPanDrag(null);
+
+      const stageRect = wheelTarget.getBoundingClientRect();
+      const pointerX = event.clientX - stageRect.left - stageRect.width / 2;
+      const pointerY = event.clientY - stageRect.top - stageRect.height / 2;
+
+      setViewport((currentViewport) => {
+        const nextScale = clampViewportScale(
+          currentViewport.scale * (event.deltaY > 0 ? 0.9 : 1.1),
+        );
+        const scaleRatio = nextScale / currentViewport.scale;
+
+        return {
+          offsetX:
+            pointerX - (pointerX - currentViewport.offsetX) * scaleRatio,
+          offsetY:
+            pointerY - (pointerY - currentViewport.offsetY) * scaleRatio,
+          scale: nextScale,
+        };
+      });
+    }
+
+    wheelTarget.addEventListener("wheel", handleWheel, { passive: false });
+
+    return () => {
+      wheelTarget.removeEventListener("wheel", handleWheel);
+    };
+  }, []);
+
+  useEffect(() => {
+    const canvas = patternCanvasRef.current;
+
+    if (!canvas) {
+      return;
+    }
+
+    const pixelRatio = Math.min(2, window.devicePixelRatio || 1);
+    const context = canvas.getContext("2d", {
+      alpha: false,
+      willReadFrequently: false,
+    });
+
+    if (!context) {
+      return;
+    }
+
+    const canvasColorMap = new Map(
+      palette.colors.map((color) => [color.id, color]),
+    );
+
+    canvas.width = Math.round(canvasBoardWidth * pixelRatio);
+    canvas.height = Math.round(canvasBoardHeight * pixelRatio);
+    canvas.style.width = `${canvasBoardWidth}px`;
+    canvas.style.height = `${canvasBoardHeight}px`;
+
+    context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    context.clearRect(0, 0, canvasBoardWidth, canvasBoardHeight);
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, canvasBoardWidth, canvasBoardHeight);
+
+    if (showCoordinates) {
+      const patternWidth = pattern.width * canvasCellSize;
+      const patternHeight = pattern.height * canvasCellSize;
+
+      context.fillStyle = "#eef5f1";
+      context.fillRect(coordinateGutter, 0, patternWidth, coordinateGutter);
+      context.fillRect(
+        coordinateGutter,
+        coordinateGutter + patternHeight,
+        patternWidth,
+        coordinateGutter,
+      );
+      context.fillRect(0, coordinateGutter, coordinateGutter, patternHeight);
+      context.fillRect(
+        coordinateGutter + patternWidth,
+        coordinateGutter,
+        coordinateGutter,
+        patternHeight,
+      );
+
+      context.fillStyle = "#5b6b62";
+      context.font = `700 ${coordinateFontSize}px Arial, sans-serif`;
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+
+      for (let column = 0; column < pattern.width; column += 1) {
+        const labelX = coordinateGutter + column * canvasCellSize + canvasCellSize / 2;
+        const label = String(column + 1);
+
+        context.fillText(label, labelX, coordinateGutter / 2);
+        context.fillText(
+          label,
+          labelX,
+          coordinateGutter + patternHeight + coordinateGutter / 2,
+        );
+      }
+
+      for (let row = 0; row < pattern.height; row += 1) {
+        const labelY = coordinateGutter + row * canvasCellSize + canvasCellSize / 2;
+        const label = String(row + 1);
+
+        context.fillText(label, coordinateGutter / 2, labelY);
+        context.fillText(
+          label,
+          coordinateGutter + patternWidth + coordinateGutter / 2,
+          labelY,
+        );
+      }
+    }
+
+    for (let row = 0; row < pattern.height; row += 1) {
+      for (let column = 0; column < pattern.width; column += 1) {
+        const cellIndex = row * pattern.width + column;
+        const colorId = pattern.cells[cellIndex];
+        const color = colorId ? canvasColorMap.get(colorId) : null;
+        const cellX = coordinateGutter + column * canvasCellSize;
+        const cellY = coordinateGutter + row * canvasCellSize;
+
+        context.fillStyle = color?.hex ?? "#ffffff";
+        context.fillRect(cellX, cellY, canvasCellSize, canvasCellSize);
+
+        if (color && showColorCodes) {
+          context.fillStyle = getReadableTextColor(color.hex);
+          context.font = `700 ${cellCodeFontSize}px Arial, sans-serif`;
+          context.textAlign = "center";
+          context.textBaseline = "middle";
+          context.fillText(
+            color.code,
+            cellX + canvasCellSize / 2,
+            cellY + canvasCellSize / 2,
+          );
+        }
+      }
+    }
+
+    if (showGridLines) {
+      context.strokeStyle = "#d9e1dc";
+      context.lineWidth = 1;
+
+      for (let column = 0; column <= pattern.width; column += 1) {
+        const lineX = coordinateGutter + column * canvasCellSize + 0.5;
+
+        context.beginPath();
+        context.moveTo(lineX, coordinateGutter);
+        context.lineTo(lineX, coordinateGutter + pattern.height * canvasCellSize);
+        context.stroke();
+      }
+
+      for (let row = 0; row <= pattern.height; row += 1) {
+        const lineY = coordinateGutter + row * canvasCellSize + 0.5;
+
+        context.beginPath();
+        context.moveTo(coordinateGutter, lineY);
+        context.lineTo(coordinateGutter + pattern.width * canvasCellSize, lineY);
+        context.stroke();
+      }
+    }
+
+  }, [
+    canvasBoardHeight,
+    canvasBoardWidth,
+    canvasCellSize,
+    cellCodeFontSize,
+    coordinateFontSize,
+    coordinateGutter,
+    palette,
+    pattern,
+    showColorCodes,
+    showCoordinates,
+    showGridLines,
+  ]);
+
+  useEffect(() => {
+    const canvas = hoverCanvasRef.current;
+
+    if (!canvas) {
+      return;
+    }
+
+    const pixelRatio = Math.min(2, window.devicePixelRatio || 1);
+    const canvasWidth = Math.round(canvasBoardWidth * pixelRatio);
+    const canvasHeight = Math.round(canvasBoardHeight * pixelRatio);
+    const context = canvas.getContext("2d", {
+      alpha: true,
+      willReadFrequently: false,
+    });
+
+    if (!context) {
+      return;
+    }
+
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
+    canvas.style.width = `${canvasBoardWidth}px`;
+    canvas.style.height = `${canvasBoardHeight}px`;
+
+    context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    context.clearRect(0, 0, canvasBoardWidth, canvasBoardHeight);
+
+    if (hoveredCellIndex === null || hoveredCellIndex < 0) {
+      return;
+    }
+
+    const hoveredColumn = hoveredCellIndex % pattern.width;
+    const hoveredRow = Math.floor(hoveredCellIndex / pattern.width);
+
+    context.strokeStyle = "#24786a";
+    context.lineWidth = 2;
+    context.strokeRect(
+      coordinateGutter + hoveredColumn * canvasCellSize + 1,
+      coordinateGutter + hoveredRow * canvasCellSize + 1,
+      canvasCellSize - 2,
+      canvasCellSize - 2,
+    );
+  }, [
+    canvasBoardHeight,
+    canvasBoardWidth,
+    canvasCellSize,
+    coordinateGutter,
+    hoveredCellIndex,
+    pattern.width,
+  ]);
+
   function handleCanvasSizeChange(size: number) {
+    setHoveredCanvasCellIndex(null);
     setPattern(
       createBlankPattern({
         width: size,
@@ -196,6 +652,7 @@ export function PatternEditorShell() {
         title: pattern.title,
       }),
     );
+    resetViewport();
   }
 
   function paintCell(index: number) {
@@ -231,22 +688,173 @@ export function PatternEditorShell() {
       return;
     }
 
-    fillCell(index);
-  }
-
-  function handleCellPointerDown(index: number) {
-    setIsDrawing(activeTool !== "Fill");
-    applyTool(index);
-  }
-
-  function handleCellPointerEnter(index: number) {
-    if (isDrawing && activeTool !== "Fill") {
-      applyTool(index);
+    if (activeTool === "Fill") {
+      fillCell(index);
     }
   }
 
-  function stopDrawing() {
-    setIsDrawing(false);
+  function handleColorSelect(colorId: string) {
+    setActiveColorId(colorId);
+    setActiveTool("Brush");
+  }
+
+  function getCanvasCellIndexFromPointer(
+    event: MouseEvent<HTMLCanvasElement> | PointerEvent<HTMLCanvasElement>,
+  ) {
+    const canvasRect = event.currentTarget.getBoundingClientRect();
+
+    if (canvasRect.width <= 0 || canvasRect.height <= 0) {
+      return -1;
+    }
+
+    const pointerX =
+      (event.clientX - canvasRect.left) * (canvasBoardWidth / canvasRect.width);
+    const pointerY =
+      (event.clientY - canvasRect.top) *
+      (canvasBoardHeight / canvasRect.height);
+    const column = Math.floor((pointerX - coordinateGutter) / canvasCellSize);
+    const row = Math.floor((pointerY - coordinateGutter) / canvasCellSize);
+
+    if (
+      column < 0 ||
+      column >= pattern.width ||
+      row < 0 ||
+      row >= pattern.height
+    ) {
+      return -1;
+    }
+
+    return row * pattern.width + column;
+  }
+
+  function updateHoveredCanvasCell(
+    event: MouseEvent<HTMLCanvasElement> | PointerEvent<HTMLCanvasElement>,
+  ) {
+    const cellIndex = getCanvasCellIndexFromPointer(event);
+    const nextCellIndex = cellIndex >= 0 ? cellIndex : null;
+
+    setHoveredCanvasCellIndex(nextCellIndex);
+    return cellIndex;
+  }
+
+  function handleCanvasPointerDown(event: PointerEvent<HTMLCanvasElement>) {
+    if (event.button !== 0 || activeTool === "Hand") {
+      return;
+    }
+
+    const cellIndex = updateHoveredCanvasCell(event);
+
+    if (cellIndex < 0) {
+      return;
+    }
+
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    drawingPointerIdRef.current = event.pointerId;
+    isDrawingRef.current = activeTool !== "Fill";
+    applyTool(cellIndex);
+  }
+
+  function handleCanvasPointerMove(event: PointerEvent<HTMLCanvasElement>) {
+    const cellIndex = updateHoveredCanvasCell(event);
+
+    if (
+      cellIndex >= 0 &&
+      isDrawingRef.current &&
+      drawingPointerIdRef.current === event.pointerId &&
+      (activeTool === "Brush" || activeTool === "Eraser")
+    ) {
+      applyTool(cellIndex);
+    }
+  }
+
+  function handleCanvasPointerEnd(event: PointerEvent<HTMLCanvasElement>) {
+    if (
+      drawingPointerIdRef.current === event.pointerId &&
+      event.currentTarget.hasPointerCapture(event.pointerId)
+    ) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    isDrawingRef.current = false;
+    drawingPointerIdRef.current = null;
+  }
+
+  function handleCanvasContextMenu(event: MouseEvent<HTMLCanvasElement>) {
+    if (activeTool === "Hand") {
+      return;
+    }
+
+    event.preventDefault();
+    const cellIndex = updateHoveredCanvasCell(event);
+
+    if (cellIndex < 0) {
+      return;
+    }
+
+    eraseCell(cellIndex);
+    setActiveTool("Eraser");
+  }
+
+  function handleStagePointerDown(event: PointerEvent<HTMLDivElement>) {
+    if (activeTool !== "Hand" || event.button !== 0) {
+      return;
+    }
+
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const nextPanDrag = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startOffsetX: viewport.offsetX,
+      startOffsetY: viewport.offsetY,
+    };
+
+    panDragRef.current = nextPanDrag;
+    setPanDrag(nextPanDrag);
+  }
+
+  function handleStagePointerMove(event: PointerEvent<HTMLDivElement>) {
+    const currentPanDrag = panDragRef.current;
+
+    if (!currentPanDrag || currentPanDrag.pointerId !== event.pointerId) {
+      return;
+    }
+
+    scheduleViewportUpdate({
+      offsetX:
+        currentPanDrag.startOffsetX + event.clientX - currentPanDrag.startX,
+      offsetY:
+        currentPanDrag.startOffsetY + event.clientY - currentPanDrag.startY,
+      scale: viewport.scale,
+    });
+  }
+
+  function stopPanning(event?: PointerEvent<HTMLDivElement>) {
+    const currentPanDrag = panDragRef.current;
+
+    if (
+      event &&
+      currentPanDrag?.pointerId === event.pointerId &&
+      event.currentTarget.hasPointerCapture(event.pointerId)
+    ) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    panDragRef.current = null;
+    setPanDrag(null);
+  }
+
+  function resetViewport() {
+    panDragRef.current = null;
+    cancelPendingPanFrame();
+    setPanDrag(null);
+    setViewport({
+      offsetX: 0,
+      offsetY: 0,
+      scale: 1,
+    });
   }
 
   async function handleDownloadPng() {
@@ -276,58 +884,17 @@ export function PatternEditorShell() {
     }
   }
 
-  const gridBackground = showGridLines ? "var(--border)" : "transparent";
-  const gridGap = showGridLines ? "1px" : "0px";
-
-  const gridCells = pattern.cells.map((colorId, index) => {
-    const color = colorId ? colorMap.get(colorId) : null;
-    const row = Math.floor(index / pattern.width) + 1;
-    const column = (index % pattern.width) + 1;
-
-    return (
-      <button
-        aria-label={
-          color
-            ? `Row ${row}, column ${column}, ${color.code} ${color.name}`
-            : `Empty cell, row ${row}, column ${column}`
-        }
-        aria-colindex={column}
-        aria-rowindex={row}
-        className="flex aspect-square touch-none items-center justify-center overflow-hidden bg-white"
-        key={index}
-        onPointerDown={() => handleCellPointerDown(index)}
-        onPointerEnter={() => handleCellPointerEnter(index)}
-        onPointerUp={stopDrawing}
-        role="gridcell"
-        style={{ backgroundColor: color?.hex ?? "#ffffff" }}
-        type="button"
-      >
-        {color && showColorCodes ? (
-          <span
-            aria-hidden="true"
-            className="select-none font-semibold tabular-nums"
-            style={{
-              color: getReadableTextColor(color.hex),
-              fontSize: cellCodeFontSize,
-              letterSpacing: 0,
-              lineHeight: 1,
-              whiteSpace: "nowrap",
-            }}
-          >
-            {color.code}
-          </span>
-        ) : null}
-      </button>
-    );
-  });
-
-  const toolHints: Record<EditorTool, string> = {
-    Brush: "Click or drag across cells to paint with the selected color.",
-    Eraser: "Click or drag across cells to clear beads from the canvas.",
-    Fill: "Click a cell to fill its connected color area with the selected bead color.",
-  };
-
-  const currentToolHint = toolHints[activeTool];
+  const viewportScaleLabel = `${Math.round(viewport.scale * 100)}%`;
+  const canvasCursor =
+    activeTool === "Hand"
+      ? panDrag
+        ? "grabbing"
+        : "grab"
+      : activeTool === "Fill"
+        ? "copy"
+        : activeTool === "Eraser"
+          ? "cell"
+          : "crosshair";
 
   const activeColorLabel = activeColor
     ? `${activeColor.code} ${activeColor.name}`
@@ -338,51 +905,194 @@ export function PatternEditorShell() {
   const filledPercent = Math.round(
     (filledCellCount / Math.max(1, pattern.cells.length)) * 100,
   );
+  const hoveredCellLabel =
+    hoveredCellRow && hoveredCellColumn
+      ? `R${hoveredCellRow} C${hoveredCellColumn}: ${
+          hoveredCellColor
+            ? `${hoveredCellColor.code} ${hoveredCellColor.name}`
+            : "Empty"
+        }`
+      : "No cell";
+  const colorCodeViewLabel = showColorCodes ? "Codes on cells" : "Codes off";
 
   const patternCanvas = (
     <div
-      aria-colcount={pattern.width}
       aria-label={`${pattern.width} by ${pattern.height} editable bead pattern canvas`}
-      aria-rowcount={pattern.height}
-      className="grid overflow-hidden rounded-md border border-[var(--border)] shadow-sm"
-      onPointerCancel={stopDrawing}
-      onPointerLeave={stopDrawing}
-      onPointerUp={stopDrawing}
-      role="grid"
+      className="relative rounded-md border border-[var(--border)] shadow-sm"
+      role="img"
       style={{
-        backgroundColor: gridBackground,
-        gap: gridGap,
-        aspectRatio: `${pattern.width} / ${pattern.height}`,
-        gridTemplateColumns: `repeat(${pattern.width}, minmax(0, 1fr))`,
+        cursor: canvasCursor,
+        height: canvasBoardHeight,
+        width: canvasBoardWidth,
       }}
     >
-      {gridCells}
+      <canvas
+        aria-hidden="true"
+        className="absolute inset-0 block rounded-md"
+        ref={patternCanvasRef}
+        style={{
+          height: canvasBoardHeight,
+          pointerEvents: "none",
+          width: canvasBoardWidth,
+        }}
+      />
+      <canvas
+        aria-hidden="true"
+        className="absolute inset-0 block rounded-md"
+        onContextMenu={handleCanvasContextMenu}
+        onPointerCancel={handleCanvasPointerEnd}
+        onPointerDown={handleCanvasPointerDown}
+        onPointerLeave={() => {
+          if (!isDrawingRef.current) {
+            setHoveredCanvasCellIndex(null);
+          }
+        }}
+        onPointerMove={handleCanvasPointerMove}
+        onPointerUp={handleCanvasPointerEnd}
+        ref={hoverCanvasRef}
+        style={{
+          cursor: canvasCursor,
+          height: canvasBoardHeight,
+          width: canvasBoardWidth,
+        }}
+      />
     </div>
   );
 
-  const coordinateLabelClass =
-    "flex min-w-0 items-center justify-center overflow-hidden bg-[var(--surface-soft)] font-semibold tabular-nums text-[var(--muted)]";
-
-  function renderCoordinateLabels(coordinates: number[]) {
-    return coordinates.map((coordinate) => (
-      <span
-        className={coordinateLabelClass}
-        key={coordinate}
-        style={{
-          fontSize: coordinateFontSize,
-          letterSpacing: 0,
-          lineHeight: 1,
-        }}
-      >
-        {coordinate}
-      </span>
-    ));
-  }
+  const floatingToolDock = (
+    <div className="pointer-events-none absolute inset-x-0 bottom-4 z-30 flex justify-center px-4">
+      <div className="pointer-events-auto flex items-center gap-1 rounded-lg border border-[var(--border)] bg-white p-1 shadow-lg">
+        {editorTools.map((tool) => (
+          <button
+            aria-label={`${tool.label} tool, shortcut ${tool.shortcut}`}
+            aria-pressed={activeTool === tool.id}
+            className={`rounded-md px-3 py-2 text-sm font-semibold transition ${
+              activeTool === tool.id
+                ? "bg-[var(--accent)] text-white"
+                : "text-[var(--foreground)] hover:bg-[var(--surface-soft)] hover:text-[var(--accent)]"
+            }`}
+            key={tool.id}
+            onClick={() => setActiveTool(tool.id)}
+            title={`${tool.label} (${tool.shortcut})`}
+            type="button"
+          >
+            {tool.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[260px_minmax(0,1fr)_300px]">
-      <aside className="grid gap-4 self-start">
-        <section className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
+    <div
+      className={`grid min-h-dvh flex-1 gap-0 xl:min-h-0 ${
+        isLeftPanelCollapsed
+          ? "xl:grid-cols-[64px_minmax(0,1fr)_280px]"
+          : "xl:grid-cols-[220px_minmax(0,1fr)_280px]"
+      }`}
+    >
+      <aside className="grid content-start gap-0 self-start border-r border-[var(--border)] bg-[var(--surface)] xl:h-full xl:min-h-0 xl:self-stretch xl:overflow-y-auto">
+        <section className="border-b border-[var(--border)] bg-[var(--surface)] p-2">
+          <div
+            className={
+              isLeftPanelCollapsed
+                ? "grid gap-2"
+                : "flex items-center justify-between gap-2"
+            }
+          >
+            {isLeftPanelCollapsed ? (
+              <Link
+                aria-label="Go to Pinbead home"
+                className="rounded-md border border-[var(--border)] bg-white px-2 py-2 text-center text-xs font-semibold transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                href="/"
+                title="Pinbead home"
+              >
+                PB
+              </Link>
+            ) : (
+              <Link
+                className="min-w-0 truncate px-1 text-base font-semibold text-[var(--foreground)] transition hover:text-[var(--accent)]"
+                href="/"
+              >
+                Pinbead
+              </Link>
+            )}
+            <button
+              aria-label={
+                isLeftPanelCollapsed
+                  ? "Expand left panel"
+                  : "Collapse left panel"
+              }
+              className="rounded-md border border-[var(--border)] bg-white px-2 py-2 text-sm font-semibold transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+              onClick={() => setIsLeftPanelCollapsed((current) => !current)}
+              title={
+                isLeftPanelCollapsed
+                  ? "Expand left panel"
+                  : "Collapse left panel"
+              }
+              type="button"
+            >
+              {isLeftPanelCollapsed ? ">>" : "<<"}
+            </button>
+          </div>
+          {isLeftPanelCollapsed ? (
+            <nav aria-label="Editor navigation" className="mt-2 grid gap-2">
+              <Link
+                className="rounded-md border border-[var(--border)] bg-white px-2 py-2 text-center text-xs font-semibold transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                href="/convert"
+                title="Import image"
+              >
+                IMG
+              </Link>
+              <Link
+                className="rounded-md border border-[var(--border)] bg-white px-2 py-2 text-center text-xs font-semibold transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                href="/patterns"
+                title="Patterns"
+              >
+                PAT
+              </Link>
+            </nav>
+          ) : (
+            <nav aria-label="Editor navigation" className="mt-3 grid gap-2">
+              <Link
+                className="rounded-md border border-[var(--border)] bg-white px-3 py-2 text-sm font-semibold transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                href="/convert"
+              >
+                Import image
+              </Link>
+              <Link
+                className="rounded-md border border-[var(--border)] bg-white px-3 py-2 text-sm font-semibold transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                href="/patterns"
+              >
+                Patterns
+              </Link>
+            </nav>
+          )}
+        </section>
+
+        {isLeftPanelCollapsed ? (
+          <div className="grid gap-0">
+            <button
+              className="border-b border-[var(--border)] bg-white px-2 py-3 text-xs font-semibold transition hover:text-[var(--accent)]"
+              onClick={resetViewport}
+              title="Center canvas"
+              type="button"
+            >
+              0
+            </button>
+            <button
+              className="bg-[var(--accent)] px-2 py-3 text-xs font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={isExporting}
+              onClick={handleDownloadPng}
+              title="Download PNG"
+              type="button"
+            >
+              PNG
+            </button>
+          </div>
+        ) : (
+          <>
+        <section className="border-b border-[var(--border)] bg-[var(--surface)] p-3">
           <p className="text-sm font-semibold text-[var(--foreground)]">
             Canvas
           </p>
@@ -402,31 +1112,16 @@ export function PatternEditorShell() {
               </button>
             ))}
           </div>
+          <button
+            className="mt-3 w-full rounded-md border border-[var(--border)] bg-white px-3 py-3 text-sm font-semibold transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            onClick={resetViewport}
+            type="button"
+          >
+            Center canvas
+          </button>
         </section>
 
-        <section className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
-          <p className="text-sm font-semibold text-[var(--foreground)]">
-            Tools
-          </p>
-          <div className="mt-3 grid gap-2">
-            {tools.map((tool) => (
-              <button
-                className={`rounded-md border px-3 py-3 text-left text-sm font-semibold transition ${
-                  activeTool === tool
-                    ? "border-[var(--accent)] bg-[var(--surface-soft)] text-[var(--accent)]"
-                    : "border-[var(--border)] bg-white text-[var(--foreground)] hover:border-[var(--accent)]"
-                }`}
-                key={tool}
-                onClick={() => setActiveTool(tool)}
-                type="button"
-              >
-                {tool}
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <section className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
+        <section className="border-b border-[var(--border)] bg-[var(--surface)] p-3">
           <p className="text-sm font-semibold text-[var(--foreground)]">
             View
           </p>
@@ -449,7 +1144,7 @@ export function PatternEditorShell() {
           </div>
         </section>
 
-        <section className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
+        <section className="border-b border-[var(--border)] bg-[var(--surface)] p-3">
           <p className="text-sm font-semibold text-[var(--foreground)]">
             Export
           </p>
@@ -471,150 +1166,202 @@ export function PatternEditorShell() {
             </p>
           ) : null}
         </section>
+          </>
+        )}
       </aside>
 
-      <section className="min-w-0 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-4">
-          <div>
-            <h1 className="text-xl font-semibold">Bead Pattern Editor</h1>
+      <section className="relative min-h-[620px] min-w-0 overflow-hidden border-y border-[var(--border)] bg-[var(--surface-soft)] xl:h-full xl:min-h-0">
+        <div
+          className="absolute inset-0 overflow-hidden bg-[radial-gradient(circle_at_center,rgba(36,120,106,0.08)_0,rgba(36,120,106,0.08)_1px,transparent_1px)] [background-size:24px_24px]"
+          ref={stageRef}
+          onLostPointerCapture={() => {
+            panDragRef.current = null;
+            setPanDrag(null);
+          }}
+          onPointerCancel={stopPanning}
+          onPointerDown={handleStagePointerDown}
+          onPointerMove={handleStagePointerMove}
+          onPointerUp={stopPanning}
+          style={{ cursor: canvasCursor }}
+        >
+          <div
+            className="absolute left-1/2 top-1/2 rounded-lg bg-white p-3 shadow-[0_18px_60px_rgba(15,17,16,0.16)] will-change-transform"
+            style={{
+              transform: `translate(calc(-50% + ${viewport.offsetX}px), calc(-50% + ${viewport.offsetY}px)) scale(${viewport.scale})`,
+              transformOrigin: "center",
+              width: canvasBoardWidth + 24,
+            }}
+          >
+            {patternCanvas}
+          </div>
+        </div>
+
+        <div className="pointer-events-none absolute left-4 right-4 top-4 z-20 flex flex-wrap items-start justify-between gap-3">
+          <div className="rounded-lg border border-[var(--border)] bg-white/95 px-4 py-3 shadow-sm backdrop-blur">
+            <h1 className="text-lg font-semibold">Bead Pattern Editor</h1>
             <p className="mt-1 text-sm text-[var(--muted)]">
               {pattern.width} x {pattern.height} grid, {palette.brand}{" "}
               {palette.name}
             </p>
+            {draftStatus === "loaded" ? (
+              <p className="mt-2 text-xs font-semibold text-[var(--accent)]">
+                Image draft loaded
+              </p>
+            ) : null}
+            {draftStatus === "missing" ? (
+              <p className="mt-2 text-xs font-semibold text-red-700">
+                Temporary image draft not found
+              </p>
+            ) : null}
           </div>
-          <span className="rounded-full bg-[var(--surface-soft)] px-3 py-1 text-xs font-semibold text-[var(--accent)]">
-            {activeTool} / {activeColor?.code}
+          <span className="rounded-full border border-[var(--border)] bg-white/95 px-3 py-2 text-xs font-semibold text-[var(--accent)] shadow-sm backdrop-blur">
+            {activeTool} / {activeColor?.code} / {viewportScaleLabel}
           </span>
         </div>
 
-        {draftStatus === "loaded" ? (
-          <div className="mt-4 rounded-md border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-3 text-sm leading-6 text-[var(--muted)]">
-            Image draft loaded. Refine outlines, faces, and color choices here
-            before exporting the final pattern.
-          </div>
-        ) : null}
-        {draftStatus === "missing" ? (
-          <div className="mt-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-700">
-            The temporary image draft was not found. Start a new conversion or
-            continue with a blank pattern.
-          </div>
-        ) : null}
-
-        <div className="mt-5 overflow-auto pb-2">
-          <div
-            className="mx-auto max-w-[760px]"
-            style={{ minWidth: boardMinWidth }}
-          >
-            {showCoordinates ? (
-              <div
-                className="grid"
-                style={{
-                  gridTemplateColumns: `${coordinateGutter}px minmax(0, 1fr) ${coordinateGutter}px`,
-                  gridTemplateRows: `${coordinateGutter}px minmax(0, 1fr) ${coordinateGutter}px`,
-                }}
-              >
-                <span aria-hidden="true" />
-                <div
-                  aria-hidden="true"
-                  className="grid border-x border-t border-[var(--border)]"
-                  style={{
-                    gridTemplateColumns: `repeat(${pattern.width}, minmax(0, 1fr))`,
-                  }}
-                >
-                  {renderCoordinateLabels(columnCoordinates)}
-                </div>
-                <span aria-hidden="true" />
-                <div
-                  aria-hidden="true"
-                  className="grid border-y border-l border-[var(--border)]"
-                  style={{
-                    gridTemplateRows: `repeat(${pattern.height}, minmax(0, 1fr))`,
-                  }}
-                >
-                  {renderCoordinateLabels(rowCoordinates)}
-                </div>
-                {patternCanvas}
-                <div
-                  aria-hidden="true"
-                  className="grid border-y border-r border-[var(--border)]"
-                  style={{
-                    gridTemplateRows: `repeat(${pattern.height}, minmax(0, 1fr))`,
-                  }}
-                >
-                  {renderCoordinateLabels(rowCoordinates)}
-                </div>
-                <span aria-hidden="true" />
-                <div
-                  aria-hidden="true"
-                  className="grid border-x border-b border-[var(--border)]"
-                  style={{
-                    gridTemplateColumns: `repeat(${pattern.width}, minmax(0, 1fr))`,
-                  }}
-                >
-                  {renderCoordinateLabels(columnCoordinates)}
-                </div>
-                <span aria-hidden="true" />
-              </div>
-            ) : (
-              patternCanvas
-            )}
-          </div>
+        <div className="pointer-events-none absolute bottom-4 left-4 z-20 hidden max-w-[280px] rounded-lg border border-[var(--border)] bg-white/95 px-3 py-2 text-xs font-semibold text-[var(--muted)] shadow-sm backdrop-blur md:grid md:gap-1">
+          <span className="text-[var(--foreground)]">
+            {activeTool} / {activeColor?.code ?? "No color"}
+          </span>
+          <span>{hoveredCellLabel}</span>
+          <span>{colorCodeViewLabel}</span>
+          <span>Ctrl + wheel zoom: {viewportScaleLabel}</span>
         </div>
 
-        <div className="mt-4 rounded-md border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-3 text-sm leading-6 text-[var(--muted)]">
-          {currentToolHint}
-        </div>
+        {floatingToolDock}
       </section>
 
-      <aside className="grid gap-4 self-start">
-        <section className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
+      <aside className="grid content-start gap-0 self-start border-l border-[var(--border)] bg-[var(--surface)] xl:h-full xl:min-h-0 xl:self-stretch xl:overflow-y-auto">
+        <section className="border-b border-[var(--border)] bg-[var(--surface)] p-3">
           <p className="text-sm font-semibold text-[var(--foreground)]">
             Palette
           </p>
           <p className="mt-1 text-sm text-[var(--muted)]">
             {palette.description}
           </p>
-          <div className="mt-4 grid max-h-[360px] gap-2 overflow-auto pr-1">
-            {palette.colors.map((color) => {
-              const colorUseCount = colorCounts.get(color.id) ?? 0;
-              const isSelectedColor = activeColor?.id === color.id;
-
-              return (
-                <button
-                  aria-label={`${color.code} ${color.name}, ${color.hex}, ${colorUseCount} beads used`}
-                  aria-pressed={isSelectedColor}
-                  className={`flex items-center gap-3 rounded-md border px-3 py-2 text-left transition ${
-                    isSelectedColor
-                      ? "border-[var(--accent)] bg-[var(--surface-soft)]"
-                      : "border-[var(--border)] bg-white hover:border-[var(--accent)]"
-                  }`}
-                  key={color.id}
-                  onClick={() => setActiveColorId(color.id)}
-                  type="button"
-                >
-                  <span
-                    aria-hidden="true"
-                    className="h-7 w-7 shrink-0 rounded-md border border-black/10"
-                    style={{ backgroundColor: color.hex }}
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-semibold text-[var(--foreground)]">
-                      {color.name}
-                    </span>
-                    <span className="block text-xs text-[var(--muted)]">
-                      {color.code} - {color.hex}
-                    </span>
-                  </span>
-                  <span className="rounded-full bg-[var(--surface-soft)] px-2 py-1 text-xs font-semibold tabular-nums text-[var(--muted)]">
-                    {colorUseCount}
-                  </span>
-                </button>
-              );
-            })}
+          <div className="mt-4 rounded-md border border-[var(--border)] bg-white px-3 py-3 text-sm">
+            <div className="flex items-center gap-3">
+              <span
+                aria-hidden="true"
+                className="h-9 w-9 shrink-0 rounded-md border border-black/10"
+                style={{ backgroundColor: activeColorHex }}
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block text-xs font-semibold text-[var(--muted)]">
+                  Selected color
+                </span>
+                <span className="block truncate font-semibold text-[var(--foreground)]">
+                  {activeColorLabel}
+                </span>
+                <span className="block text-xs text-[var(--muted)]">
+                  {activeColor?.family ?? "Other"} -{" "}
+                  {activeColor?.hex ?? "#ffffff"}
+                </span>
+              </span>
+              <span className="rounded-full bg-[var(--surface-soft)] px-2 py-1 text-xs font-semibold tabular-nums text-[var(--accent)]">
+                {selectedColorCount}
+              </span>
+            </div>
           </div>
+
+          <div className="mt-4 grid gap-2">
+            <label className="sr-only" htmlFor="palette-search">
+              Search palette
+            </label>
+            <input
+              className="w-full rounded-md border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none transition placeholder:text-[var(--muted)] focus:border-[var(--accent)]"
+              id="palette-search"
+              onChange={(event) => setColorSearch(event.target.value)}
+              placeholder="Search code, name, hex"
+              type="search"
+              value={colorSearch}
+            />
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+              <label className="sr-only" htmlFor="palette-family">
+                Color family
+              </label>
+              <select
+                className="min-w-0 rounded-md border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none transition focus:border-[var(--accent)]"
+                id="palette-family"
+                onChange={(event) => setSelectedColorFamily(event.target.value)}
+                value={selectedColorFamily}
+              >
+                {colorFamilies.map((family) => (
+                  <option key={family} value={family}>
+                    {family}
+                  </option>
+                ))}
+              </select>
+              <button
+                aria-pressed={showUsedColorsOnly}
+                className={`rounded-md border px-3 py-2 text-sm font-semibold transition ${
+                  showUsedColorsOnly
+                    ? "border-[var(--accent)] bg-[var(--surface-soft)] text-[var(--accent)]"
+                    : "border-[var(--border)] bg-white text-[var(--foreground)] hover:border-[var(--accent)]"
+                }`}
+                onClick={() => setShowUsedColorsOnly((current) => !current)}
+                type="button"
+              >
+                Used
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-3 flex items-center justify-between gap-3 text-xs font-semibold text-[var(--muted)]">
+            <span>
+              {visiblePaletteColors.length} / {palette.colors.length} colors
+            </span>
+            <span>{colorStats.length} used</span>
+          </div>
+
+          {visiblePaletteColors.length > 0 ? (
+            <div className="mt-3 grid max-h-[380px] grid-cols-6 gap-2 overflow-auto pr-1">
+              {visiblePaletteColors.map((color) => {
+                const colorUseCount = colorCounts.get(color.id) ?? 0;
+                const isSelectedColor = activeColor?.id === color.id;
+
+                return (
+                  <button
+                    aria-label={`${color.code} ${color.name}, ${color.hex}, ${colorUseCount} beads used`}
+                    aria-pressed={isSelectedColor}
+                    className={`relative aspect-square rounded-md border-2 transition focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30 ${
+                      isSelectedColor
+                        ? "border-[var(--accent)]"
+                        : "border-black/10 hover:border-[var(--accent)]"
+                    }`}
+                    key={color.id}
+                    onClick={() => handleColorSelect(color.id)}
+                    style={{ backgroundColor: color.hex }}
+                    title={`${color.code} ${color.name} (${color.family ?? "Other"})`}
+                    type="button"
+                  >
+                    {isSelectedColor ? (
+                      <span
+                        aria-hidden="true"
+                        className="absolute inset-x-2 bottom-1 h-1 rounded-full"
+                        style={{
+                          backgroundColor: getReadableTextColor(color.hex),
+                        }}
+                      />
+                    ) : null}
+                    {colorUseCount > 0 ? (
+                      <span
+                        aria-hidden="true"
+                        className="absolute right-1 top-1 h-2 w-2 rounded-full border border-white bg-[var(--accent)]"
+                      />
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="mt-3 rounded-md border border-dashed border-[var(--border)] bg-white px-3 py-4 text-sm text-[var(--muted)]">
+              No colors match the current filters.
+            </p>
+          )}
         </section>
 
-        <section className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
+        <section className="border-b border-[var(--border)] bg-[var(--surface)] p-3">
           <p className="text-sm font-semibold text-[var(--foreground)]">
             Pattern summary
           </p>
@@ -640,30 +1387,6 @@ export function PatternEditorShell() {
             <div className="flex justify-between gap-3 rounded-md bg-[var(--surface-soft)] px-3 py-2">
               <span className="text-[var(--muted)]">Filled</span>
               <span className="font-semibold">{filledPercent}%</span>
-            </div>
-          </div>
-
-          <div className="mt-4 rounded-md border border-[var(--border)] bg-white px-3 py-3 text-sm">
-            <div className="flex items-center gap-3">
-              <span
-                aria-hidden="true"
-                className="h-8 w-8 shrink-0 rounded-md border border-black/10"
-                style={{ backgroundColor: activeColorHex }}
-              />
-              <span className="min-w-0 flex-1">
-                <span className="block text-xs font-semibold text-[var(--muted)]">
-                  Selected color
-                </span>
-                <span className="block truncate font-semibold">
-                  {activeColorLabel}
-                </span>
-                <span className="block text-xs text-[var(--muted)]">
-                  {activeColor?.hex ?? "#ffffff"}
-                </span>
-              </span>
-              <span className="rounded-full bg-[var(--surface-soft)] px-2 py-1 text-xs font-semibold tabular-nums text-[var(--accent)]">
-                {selectedColorCount}
-              </span>
             </div>
           </div>
 

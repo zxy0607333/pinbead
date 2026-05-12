@@ -591,57 +591,6 @@ export function PatternEditorShell() {
     showGridLines,
   ]);
 
-  useEffect(() => {
-    const canvas = hoverCanvasRef.current;
-
-    if (!canvas) {
-      return;
-    }
-
-    const pixelRatio = Math.min(2, window.devicePixelRatio || 1);
-    const canvasWidth = Math.round(canvasBoardWidth * pixelRatio);
-    const canvasHeight = Math.round(canvasBoardHeight * pixelRatio);
-    const context = canvas.getContext("2d", {
-      alpha: true,
-      willReadFrequently: false,
-    });
-
-    if (!context) {
-      return;
-    }
-
-    canvas.width = canvasWidth;
-    canvas.height = canvasHeight;
-    canvas.style.width = `${canvasBoardWidth}px`;
-    canvas.style.height = `${canvasBoardHeight}px`;
-
-    context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-    context.clearRect(0, 0, canvasBoardWidth, canvasBoardHeight);
-
-    if (hoveredCellIndex === null || hoveredCellIndex < 0) {
-      return;
-    }
-
-    const hoveredColumn = hoveredCellIndex % pattern.width;
-    const hoveredRow = Math.floor(hoveredCellIndex / pattern.width);
-
-    context.strokeStyle = "#24786a";
-    context.lineWidth = 2;
-    context.strokeRect(
-      coordinateGutter + hoveredColumn * canvasCellSize + 1,
-      coordinateGutter + hoveredRow * canvasCellSize + 1,
-      canvasCellSize - 2,
-      canvasCellSize - 2,
-    );
-  }, [
-    canvasBoardHeight,
-    canvasBoardWidth,
-    canvasCellSize,
-    coordinateGutter,
-    hoveredCellIndex,
-    pattern.width,
-  ]);
-
   function handleCanvasSizeChange(size: number) {
     setHoveredCanvasCellIndex(null);
     setPattern(

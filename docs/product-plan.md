@@ -1,6 +1,6 @@
 # 产品规划
 
-最后更新：2026-05-10
+最后更新：2026-05-14
 
 ## 产品定位
 
@@ -16,6 +16,7 @@ Bead pattern editor and printable pattern library.
 Editor is the core.
 Image conversion is an import method.
 Pattern library is the SEO and content engine.
+Admin CMS is the publishing workflow.
 ```
 
 中文说明：
@@ -24,6 +25,7 @@ Pattern library is the SEO and content engine.
 编辑器是核心。
 图片转换只是导入草稿。
 图纸库负责 SEO、内容厚度和 AdSense。
+后台 CMS 负责图纸、分类和教程的持续发布。
 ```
 
 ## 为什么要调整方向
@@ -117,6 +119,35 @@ Upload image
 -> Open in editor
 ```
 
+### 后台 CMS `/admin`
+
+后台是站长自用的内容发布系统，不面向普通用户开放。
+
+后台目标：
+
+- 管理图纸库内容，而不是长期手动修改静态数据。
+- 新建、编辑、预览、发布和下架图纸。
+- 管理分类和教程。
+- 补充英文标题、摘要、正文说明、SEO title 和 SEO description。
+- 管理图纸状态：draft、published、archived。
+- 只让 `published` 内容进入公开页面、sitemap 和 AdSense 流量承载页。
+
+第一版后台允许管理员手动创建图纸、导入 Pattern JSON 和上传预览图；从 `/editor` 或 `/convert` 一键保存到后台草稿后置，不阻塞图纸库上线。
+
+推荐后台页面：
+
+```text
+/admin/login
+/admin
+/admin/patterns
+/admin/patterns/new
+/admin/patterns/[id]
+/admin/categories
+/admin/guides
+```
+
+第一版后台只给管理员使用，暂不做普通用户注册、投稿、评论、点赞和复杂权限系统。
+
 ### 图纸库 `/patterns`
 
 图纸库是 SEO 和 AdSense 的核心承载区。
@@ -180,6 +211,8 @@ Upload image
 3. Public Domain / CC0 素材转制，并记录来源。
 4. 授权设计师投稿。
 5. 用户投稿，必须审核后公开。
+
+所有公开图纸都应该通过后台 CMS 进入发布流程。后台负责记录来源类型、正文说明、SEO 信息、发布状态和下架状态，避免公开页面直接依赖临时静态数据。
 
 不建议公开收录高风险 IP 内容，例如 Disney、Nintendo、Pokemon、Marvel、Sanrio、明星照片、影视角色和动漫角色。
 

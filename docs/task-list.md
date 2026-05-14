@@ -1,6 +1,6 @@
 # Pinbead 任务列表
 
-最后更新：2026-05-11
+最后更新：2026-05-14
 
 ## 状态说明
 
@@ -24,6 +24,7 @@ Pinbead 的方向调整为：
 /                              首页
 /editor                        拼豆图纸编辑器
 /convert                       图片转拼豆图纸
+/admin                         管理员后台
 /patterns                      免费图纸库
 /categories/[categorySlug]     分类页
 /pattern/[patternSlug]         单个图纸详情页
@@ -126,6 +127,7 @@ Pinbead 的方向调整为：
 /
 /editor
 /convert
+/admin
 /patterns
 /categories/[categorySlug]
 /pattern/[patternSlug]
@@ -388,7 +390,7 @@ Pinbead 的方向调整为：
 - 用户能在编辑器里修改转换结果。
 - 刷新或离开页面时不默认保存用户原图。
 
-## 5. 首页和 SEO 内容页
+## 5. 后台 CMS 与 SEO 内容页
 
 ### [x] 5.1 重做轻量首页
 
@@ -406,38 +408,108 @@ Pinbead 的方向调整为：
 - 首页能自然分流到 `/editor`、`/convert`、`/patterns`。
 - 首页移动端首屏轻量。
 
-### [ ] 5.2 建立 `/patterns` 图纸库
+### [ ] 5.2 接入数据库和 Prisma
 
 需求：
 
+- 接入 PostgreSQL，作为后台 CMS、图纸库、分类、教程和发布状态的数据源。
+- 接入 Prisma，建立迁移、类型和查询层。
+- 建立 `AdminUser`、`Category`、`Pattern`、`Guide` 的第一版 schema。
+- `Pattern` 使用 `cellsJson` 存储图纸矩阵，不把每个格子拆成数据库行。
+- 保留 `draft`、`published`、`archived` 状态字段。
+- 本地开发环境需要有清晰的 `.env` 示例和迁移命令说明。
+
+验收标准：
+
+- 本地可以执行 Prisma migrate。
+- 应用可以连接数据库。
+- 数据模型能支撑后台图纸发布流程。
+
+### [ ] 5.3 建立管理员登录
+
+需求：
+
+- 新建 `/admin/login`。
+- 第一版只支持站长或管理员登录，不开放注册。
+- 使用安全的密码哈希，不在代码中明文写密码。
+- 登录后使用服务端 session 或签名 cookie。
+- Cookie 必须设置 `httpOnly`、`secure`、`sameSite` 和过期时间。
+- 登录接口需要基础限流，防止暴力尝试密码。
+- 后台写操作需要 CSRF 防护或严格同源校验。
+- 未登录访问 `/admin` 页面必须跳转到登录页。
+- `/admin` 页面和后台 API 必须服务端鉴权，不能只靠前端隐藏按钮。
+- `/admin` 相关页面需要 noindex，避免被搜索引擎收录。
+
+验收标准：
+
+- 管理员可以登录和退出。
+- 未登录用户不能访问后台页面。
+- 退出登录后当前 session 失效。
+- 连续登录失败会被限制。
+- 无有效登录态或 CSRF 校验的写请求会被拒绝。
+- 后台页面不会进入公开 sitemap。
+
+### [ ] 5.4 建立后台图纸管理
+
+需求：
+
+- 新建 `/admin/patterns` 图纸列表。
+- 支持按状态、分类、关键词筛选。
+- 支持新建图纸 `/admin/patterns/new`。
+- 支持编辑图纸 `/admin/patterns/[id]`。
+- 图纸字段包括 title、slug、summary、description、category、difficulty、width、height、colorCount、beadCount、paletteId、cellsJson、previewImageUrl、downloadImageUrl、sourceType、seoTitle、seoDescription、status。
+- 支持保存草稿、发布、下架。
+- 发布前需要校验 slug、标题、分类、图纸数据和 SEO 基础字段。
+- 支持上传预览图或下载文件时，文件必须写入持久化上传目录或对象存储，不写入 `.next`、临时目录或会被构建覆盖的目录。
+- 上传文件需要限制类型、大小和图片尺寸，并使用随机文件名。
+
+验收标准：
+
+- 管理员可以创建和编辑图纸。
+- 管理员可以把图纸从草稿发布为公开内容。
+- 下架图纸不会在公开页面展示。
+- 服务器重启或重新部署后，已上传预览图仍然可访问。
+- 非白名单文件无法上传或公开访问。
+
+### [ ] 5.5 建立 `/patterns` 图纸库
+
+需求：
+
+- `/patterns` 从数据库读取 `published` 图纸。
 - 展示精选原创图纸。
 - 支持进入分类页。
 - 支持进入单个图纸详情页。
-- 第一版用静态数据维护。
+- 页面需要有英文介绍文案，不能只是图纸列表。
+- 页面需要自然链接到 `/editor` 和 `/convert`。
 
 验收标准：
 
 - `/patterns` 可被搜索引擎收录。
-- 页面不是空列表，有真实图纸内容。
+- 页面不是空列表，有后台发布的真实图纸内容。
+- 未发布和下架图纸不会显示。
 
-### [ ] 5.3 建立 `/categories/[categorySlug]`
+### [ ] 5.6 建立 `/categories/[categorySlug]`
 
 需求：
 
 - 首批分类：Animals、Food、Holidays、Beginner、Cute、Nature、Letters & Numbers。
-- 每个分类有独特介绍。
-- 每个分类至少有若干图纸，不创建空分类。
+- 分类由后台管理。
+- 每个分类有独特介绍、SEO title、SEO description。
+- 每个分类至少有若干已发布图纸，不创建空分类。
 
 验收标准：
 
 - 分类页能承接长尾 SEO。
 - 分类页到图纸详情页内链完整。
+- 没有已发布内容的分类不进入公开导航和 sitemap。
 
-### [ ] 5.4 建立 `/pattern/[patternSlug]`
+### [ ] 5.7 建立 `/pattern/[patternSlug]`
 
 需求：
 
-- 单个图纸详情页包含预览、尺寸、难度、颜色数量、用豆统计、下载和制作提示。
+- 单个图纸详情页从数据库读取 `published` 图纸。
+- 页面包含预览、尺寸、难度、颜色数量、用豆统计、下载和制作提示。
+- 页面包含 200-400 英文词的独立说明文案。
 - 页面包含相关图纸。
 - 页面 title 和 H1 面向英文 SEO。
 
@@ -445,12 +517,14 @@ Pinbead 的方向调整为：
 
 - 图纸详情页不是薄页面。
 - 用户可以下载或打开到编辑器继续编辑。
+- 未发布或下架图纸返回 404。
 
-### [ ] 5.5 建立 `/guides` 和教程详情页
+### [ ] 5.8 建立 `/guides` 和教程详情页
 
 需求：
 
-- 教程列表页展示全部 guide。
+- 教程列表页展示全部已发布 guide。
+- 后台支持管理 guide 草稿和发布状态。
 - 首批教程：
   - How to Make a Bead Pattern
   - How to Turn a Photo into a Bead Pattern
@@ -463,6 +537,22 @@ Pinbead 的方向调整为：
 
 - 教程页能承接长尾 SEO。
 - 教程不是纯文字堆砌，后续应加入截图或示例图纸。
+
+### [ ] 5.9 支持从编辑器保存到后台草稿
+
+需求：
+
+- 该能力暂时不阻塞上线，放在 `/patterns`、分类页和详情页完成后再做。
+- `/editor` 增加管理员可用的 `Save to library draft` 入口。
+- 保存时把当前 Pattern 模型写入后台草稿。
+- 草稿进入 `/admin/patterns/[id]` 后继续补充 SEO 和发布信息。
+- 普通访客不显示后台保存入口。
+
+验收标准：
+
+- 管理员能从编辑器把图纸保存到后台。
+- 保存后的图纸可以在后台继续编辑和发布。
+- 不会上传或保存用户原始图片。
 
 ## 6. AdSense 和合规
 

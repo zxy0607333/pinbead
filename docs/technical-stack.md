@@ -1,6 +1,6 @@
 # 技术栈与架构
 
-最后更新：2026-05-10
+最后更新：2026-05-14
 
 ## 推荐技术栈
 
@@ -10,14 +10,14 @@
 | --- | --- | --- |
 | Web 框架 | Next.js App Router + TypeScript | 同时承载首页、编辑器、转换器、图库、教程和后续 API。 |
 | UI | Tailwind CSS + 自建组件 | 编辑器交互较定制，先自建核心组件更直接。 |
-| 编辑器渲染 | HTML/CSS Grid + Canvas 导出 | 页面编辑用 DOM grid，导出用 Canvas。 |
+| 编辑器渲染 | Canvas editor stage + Canvas 导出 | 中间画板使用 Canvas 渲染，支持平移、缩放、高亮和高密度格子；导出继续使用 Canvas。 |
 | 图片导入 | File API + Canvas + createImageBitmap | 图片在浏览器本地处理，默认不上传原图。 |
 | 色彩匹配 | LAB 色彩空间 + 品牌色卡 | 当前已具备基础 LAB 匹配能力。 |
 | 图纸模型 | TypeScript Pattern model | 编辑器、转换器、导出、图库共用同一数据模型。 |
-| 数据库 | PostgreSQL，后置 | 用户保存、公开图库、审核队列上线后再引入。 |
-| ORM | Prisma，后置 | 配合 PostgreSQL 管理迁移和类型。 |
-| 对象存储 | Cloudflare R2，后置 | 存公开预览图、PDF、pattern JSON。 |
-| 登录 | Auth.js，后置 | 保存、投稿、收藏、用户页需要时再上。 |
+| 数据库 | PostgreSQL | 后台 CMS、图纸库、分类、教程和发布状态需要数据库支撑。 |
+| ORM | Prisma | 配合 PostgreSQL 管理迁移、类型和后台 CRUD。 |
+| 对象存储 | 本地磁盘起步，后续 Cloudflare R2 | 存公开预览图、PDF、pattern JSON；自有服务器可先用本地上传目录。 |
+| 后台登录 | 自建 Admin Session 起步，后续 Auth.js | 第一版只给管理员使用，不急着接公开用户系统。 |
 | 部署 | Docker Compose + Nginx/Caddy | 自有服务器部署，Next.js 使用 standalone 输出。 |
 | 分析 | GA4 + Search Console | SEO 和行为分析必备。 |
 | 监控 | Sentry + uptime monitor | 上线后监控前端和服务端错误。 |
@@ -44,6 +44,13 @@ src/app/
   page.tsx
   editor/page.tsx
   convert/page.tsx
+  admin/login/page.tsx
+  admin/page.tsx
+  admin/patterns/page.tsx
+  admin/patterns/new/page.tsx
+  admin/patterns/[id]/page.tsx
+  admin/categories/page.tsx
+  admin/guides/page.tsx
   patterns/page.tsx
   categories/[categorySlug]/page.tsx
   pattern/[patternSlug]/page.tsx
@@ -51,9 +58,10 @@ src/app/
   guides/[guideSlug]/page.tsx
 
 src/components/editor/
-  pattern-editor.tsx
-  pattern-grid.tsx
-  editor-toolbar.tsx
+  pattern-editor-shell.tsx
+  canvas-stage.tsx
+  editor-sidebars.tsx
+  floating-tool-dock.tsx
   palette-panel.tsx
   color-count-panel.tsx
   export-panel.tsx
@@ -62,6 +70,13 @@ src/components/convert/
   image-importer.tsx
   crop-controls.tsx
   conversion-settings.tsx
+
+src/components/admin/
+  admin-shell.tsx
+  pattern-form.tsx
+  pattern-status-controls.tsx
+  category-form.tsx
+  guide-form.tsx
 
 src/components/home/
   hero.tsx
@@ -76,11 +91,21 @@ src/lib/pattern/
   pattern-export.ts
   bead-color-matching.ts
 
-src/data/
-  bead-palettes.ts
+src/lib/admin/
+  auth.ts
+  permissions.ts
+
+src/lib/db/
+  prisma.ts
   patterns.ts
   categories.ts
   guides.ts
+
+src/data/
+  bead-palettes.ts
+  seed-patterns.ts
+  seed-categories.ts
+  seed-guides.ts
 ```
 
 ## 核心图纸模型
@@ -113,6 +138,31 @@ type PatternDocument = {
 ```
 
 不要把每个格子作为数据库行存储。后续持久化时，用压缩 JSON 或 RLE 存储图纸矩阵。
+
+## 后台 CMS 能力
+
+图纸库上线后需要后台驱动发布，而不是长期使用静态数组维护。
+
+第一版后台建议能力：
+
+- 管理员登录。
+- Pattern 列表、新建、编辑、预览、发布、下架。
+- Category 列表、新建、编辑。
+- Guide 列表、新建、编辑、发布。
+- 所有公开页面只读取 `published` 状态内容。
+- sitemap 只收录已发布内容。
+- 管理员页面不展示广告，不被搜索引擎索引。
+
+后台数据模型至少包括：
+
+```text
+AdminUser
+Category
+Pattern
+Guide
+```
+
+图纸矩阵使用 `cellsJson` 存储，不拆成单格数据库行。
 
 ## 编辑器能力
 
@@ -180,16 +230,40 @@ Internet
 -> Cloudflare DNS/CDN/WAF
 -> Server Nginx or Caddy
 -> Next.js standalone Node process
--> PostgreSQL later
--> Cloudflare R2 later
+-> PostgreSQL
+-> Local uploads or Cloudflare R2 later
 ```
 
-前期如果没有数据库，Next.js 可以先以静态数据和本地前端工具运行。
+上线图纸库前建议先接入 PostgreSQL 和 Prisma，否则后台发布、图纸状态、分类页和 sitemap 都会变得难维护。
+
+本地上传可以作为第一版起步方案，但必须明确持久化边界：
+
+- 上传目录必须位于应用构建目录之外，例如 `/var/lib/pinbead/uploads`，或挂载为 Docker volume。
+- 不要把后台上传内容写入 `.next`、临时目录或会被重新构建覆盖的 `public` 输出目录。
+- 预览图、导出图和附件文件名使用随机 ID，不使用用户原始文件名。
+- 限制文件类型、文件大小和图片尺寸，公开访问的上传文件只允许图片、PDF、JSON 等白名单类型。
+- Nginx/Caddy 可以只读方式托管公开上传目录，也可以由 Next.js 受控代理输出。
+- 本地磁盘上传需要纳入服务器备份；后续流量起来后再迁移到 Cloudflare R2。
+
+后台安全边界第一版也要明确：
+
+- 管理员密码只存哈希，不把明文密码写入代码或环境变量。
+- 登录 Cookie 使用 `httpOnly`、`secure`、`sameSite`，并设置过期时间。
+- `/admin` 所有路由必须经过服务端鉴权，未登录不能只靠前端隐藏。
+- 登录接口需要基础限流，防止暴力尝试。
+- 后台写操作需要 CSRF 防护或同源校验。
+- `/admin` 页面全部 `noindex`，不进入 sitemap，也不展示 AdSense。
 
 ## 环境变量预留
 
 ```text
 DATABASE_URL=
+ADMIN_EMAIL=
+ADMIN_PASSWORD_HASH=
+ADMIN_SESSION_SECRET=
+ADMIN_SESSION_MAX_AGE=
+UPLOAD_DIR=
+UPLOAD_PUBLIC_BASE_URL=
 NEXTAUTH_URL=
 NEXTAUTH_SECRET=
 GOOGLE_CLIENT_ID=
@@ -205,4 +279,3 @@ SENTRY_DSN=
 GA_MEASUREMENT_ID=
 ADSENSE_CLIENT_ID=
 ```
-

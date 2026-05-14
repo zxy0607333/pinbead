@@ -1,6 +1,6 @@
 # 版本路线图
 
-最后更新：2026-05-10
+最后更新：2026-05-14
 
 ## 总体策略
 
@@ -10,6 +10,7 @@
 轻首页
 -> 核心编辑器
 -> 图片导入转换
+-> 后台 CMS
 -> 原创图纸库
 -> 分类页和教程页 SEO
 -> AdSense
@@ -68,7 +69,29 @@
 - 用户能修改图片转换生成的草稿。
 - 导出的图纸能用于实际制作。
 
-## V0.2 内容和 SEO 基础版
+## V0.2A 后台 CMS 基础版
+
+目标：建立自用后台，让图纸库可以持续发布，而不是靠修改静态数据维护。
+
+范围：
+
+- PostgreSQL 和 Prisma。
+- AdminUser、Category、Pattern、Guide 数据模型。
+- `/admin/login` 管理员登录。
+- `/admin/patterns` 图纸列表。
+- `/admin/patterns/new` 和 `/admin/patterns/[id]`。
+- 图纸草稿、发布、下架状态。
+- 图纸 SEO 字段：title、description、summary、seoTitle、seoDescription。
+- 管理员在后台手动创建图纸草稿、导入 Pattern JSON、上传预览图。
+
+验收标准：
+
+- 管理员可以登录后台。
+- 管理员可以创建图纸草稿并发布。
+- 未发布内容不会出现在公开页面和 sitemap。
+- 后台页面不被搜索引擎索引。
+
+## V0.2B 内容和 SEO 基础版
 
 目标：建立图纸库和 SEO 页面矩阵。
 
@@ -79,7 +102,7 @@
 - `/pattern/[patternSlug]` 图纸详情页。
 - `/guides` 教程列表。
 - `/guides/[guideSlug]` 教程详情页。
-- 第一批 20-30 个原创 beginner patterns。
+- 第一批 20-30 个通过后台发布的原创 beginner patterns。
 - 3-5 篇教程文章。
 - sitemap、robots、基础结构化数据。
 - GA4 和 Search Console。
@@ -176,5 +199,5 @@
 - 原生移动 App。
 - 复杂 AI 审核。
 - 服务器端保存所有上传原图。
+- 从 `/editor` 或 `/convert` 一键保存图纸草稿到后台。
 - 付费会员系统。
-

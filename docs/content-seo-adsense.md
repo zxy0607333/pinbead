@@ -1,6 +1,6 @@
 # 内容、SEO 与 AdSense
 
-最后更新：2026-05-10
+最后更新：2026-05-14
 
 ## SEO 总体判断
 
@@ -23,6 +23,7 @@
 /                              首页
 /editor                        拼豆图纸编辑器
 /convert                       图片转拼豆图纸
+/admin                         管理员后台，不索引
 /patterns                      免费图纸库
 /categories/animals            动物分类
 /categories/food               食物分类
@@ -34,6 +35,18 @@
 ```
 
 不使用 `/c`、`/p` 这类过短路径。分类和详情分开，避免 `/patterns/animals` 与 `/patterns/cute-cat` 同级混淆。
+
+## 后台与索引边界
+
+图纸库内容应通过 `/admin` 后台发布，而不是长期手动维护静态数据。
+
+后台原则：
+
+- `/admin`、`/admin/login` 和所有后台编辑页都必须 `noindex`。
+- 后台页面不进入 sitemap。
+- 只有 `published` 状态的图纸、分类和教程进入公开页面。
+- `draft` 和 `archived` 内容不展示、不索引、不放广告。
+- 公开内容必须有标题、摘要、正文说明、分类、SEO title 和 SEO description。
 
 ## 首页 SEO 和设计
 
@@ -140,6 +153,15 @@
 
 优先做 16x16、24x24、32x32 的 beginner-friendly 图纸。
 
+发布流程建议：
+
+```text
+editor / convert 生成图纸草稿
+-> admin 补充英文文案、分类和 SEO 信息
+-> admin 预览
+-> published 后进入 /patterns、/categories 和 /pattern
+```
+
 ## AdSense 策略
 
 申请前建议具备：
@@ -199,4 +221,3 @@
 - PNG/PDF 下载次数。
 - AdSense RPM。
 - 用户是否主动请求保存和分享功能。
-

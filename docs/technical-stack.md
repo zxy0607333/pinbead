@@ -236,6 +236,37 @@ Internet
 
 上线图纸库前建议先接入 PostgreSQL 和 Prisma，否则后台发布、图纸状态、分类页和 sitemap 都会变得难维护。
 
+## Prisma 本地开发
+
+当前数据库层使用 Prisma 7、PostgreSQL 和 `@prisma/adapter-pg`。
+
+本地开发流程：
+
+```text
+cp .env.example .env
+docker compose up -d db
+npm run db:generate
+npm run db:migrate
+```
+
+常用命令：
+
+```text
+npm run db:generate   # 生成 Prisma Client
+npm run db:migrate    # 本地开发迁移
+npm run db:deploy     # 服务器部署时应用已有迁移
+npm run db:studio     # 打开 Prisma Studio
+```
+
+第一版 schema 包括：
+
+- `AdminUser`：管理员账号和密码哈希。
+- `Category`：图纸分类。
+- `Pattern`：图纸内容、SEO 字段、状态和 `cellsJson`。
+- `Guide`：教程内容和发布状态。
+
+`src/lib/db` 是查询层入口，公开页面后续只读取 `published` 状态的数据。
+
 本地上传可以作为第一版起步方案，但必须明确持久化边界：
 
 - 上传目录必须位于应用构建目录之外，例如 `/var/lib/pinbead/uploads`，或挂载为 Docker volume。

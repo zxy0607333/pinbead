@@ -52,3 +52,4 @@ Thumbs.db
 .cache/
 .turbo/
 .vercel/
+/src/generated/prisma/

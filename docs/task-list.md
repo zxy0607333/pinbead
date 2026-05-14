@@ -408,7 +408,7 @@ Pinbead 的方向调整为：
 - 首页能自然分流到 `/editor`、`/convert`、`/patterns`。
 - 首页移动端首屏轻量。
 
-### [ ] 5.2 接入数据库和 Prisma
+### [~] 5.2 接入数据库和 Prisma
 
 需求：
 

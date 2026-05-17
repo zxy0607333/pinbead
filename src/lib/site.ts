@@ -3,5 +3,5 @@ export const siteConfig = {
   description:
     "Turn images into printable pin bead patterns and browse original bead designs.",
   url: "https://pinbead.com",
+  contactEmail: "contact@pinbead.com",
 };
-

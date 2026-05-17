@@ -488,7 +488,7 @@ Pinbead 的方向调整为：
 - 页面不是空列表，有后台发布的真实图纸内容。
 - 未发布和下架图纸不会显示。
 
-### [ ] 5.6 建立 `/categories/[categorySlug]`
+### [x] 5.6 建立 `/categories/[categorySlug]`
 
 需求：
 

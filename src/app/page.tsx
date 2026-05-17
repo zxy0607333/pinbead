@@ -1,4 +1,8 @@
 import { BeadMosaic } from "@/components/bead-mosaic";
+import { PatternCard } from "@/components/patterns/pattern-card";
+import { getPublishedCategories } from "@/lib/db/categories";
+import { getPublishedGuideSummaries } from "@/lib/db/guides";
+import { getPublishedPatternSummaries } from "@/lib/db/patterns";
 import { siteConfig } from "@/lib/site";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -9,14 +13,7 @@ export const metadata: Metadata = {
     "Design printable bead patterns from scratch, convert images into editable drafts, and browse beginner-friendly bead designs.",
 };
 
-const categories = [
-  { name: "Animals", href: "/categories/animals", count: "12 patterns" },
-  { name: "Food", href: "/categories/food", count: "8 patterns" },
-  { name: "Holidays", href: "/categories/holidays", count: "10 patterns" },
-  { name: "Beginner", href: "/categories/beginner", count: "16 patterns" },
-  { name: "Cute", href: "/categories/cute", count: "9 patterns" },
-  { name: "Nature", href: "/categories/nature", count: "7 patterns" },
-];
+export const dynamic = "force-dynamic";
 
 const steps = [
   {
@@ -36,63 +33,6 @@ const steps = [
     text: "Download a printable chart with counts and a clean preview.",
   },
 ];
-
-const featuredPatterns = [
-  {
-    title: "Cute Cat",
-    href: "/pattern/cute-cat",
-    meta: "24 x 24, beginner",
-    colors: ["#16201b", "#f6d7c8", "#ffffff"],
-  },
-  {
-    title: "Tiny Strawberry",
-    href: "/pattern/tiny-strawberry",
-    meta: "16 x 16, keychain",
-    colors: ["#d95d39", "#24786a", "#ffffff"],
-  },
-  {
-    title: "Cozy Snowman",
-    href: "/pattern/cozy-snowman",
-    meta: "32 x 32, holiday",
-    colors: ["#ffffff", "#2f4f7f", "#e7b548"],
-  },
-  {
-    title: "Simple Flower",
-    href: "/pattern/simple-flower",
-    meta: "24 x 24, easy",
-    colors: ["#e7b548", "#d97aa7", "#75b06d"],
-  },
-];
-
-const guides = [
-  {
-    title: "How to make a bead pattern",
-    href: "/guides/how-to-make-a-bead-pattern",
-  },
-  {
-    title: "How to turn a photo into a bead pattern",
-    href: "/guides/how-to-turn-a-photo-into-a-bead-pattern",
-  },
-  {
-    title: "Bead color chart",
-    href: "/guides/bead-color-chart",
-  },
-];
-
-const masonryPatterns = [
-  ["Rainbow Star", "Beginner", "24 x 24", "#e7b548", "h-44"],
-  ["Blue Whale", "Animals", "32 x 24", "#4a8fd8", "h-56"],
-  ["Mushroom", "Cute", "24 x 32", "#d95d39", "h-64"],
-  ["Pumpkin", "Holidays", "32 x 32", "#e98b2a", "h-48"],
-  ["Happy Frog", "Animals", "24 x 24", "#75b06d", "h-60"],
-  ["Cupcake", "Food", "32 x 32", "#efb8cf", "h-52"],
-  ["Moon Cloud", "Nature", "24 x 24", "#bfd5f2", "h-44"],
-  ["Tiny Pizza", "Food", "16 x 16", "#e7b548", "h-56"],
-  ["Heart Charm", "Beginner", "16 x 16", "#c94a52", "h-48"],
-  ["Winter Tree", "Holidays", "32 x 40", "#24786a", "h-64"],
-  ["Sleepy Fox", "Animals", "32 x 32", "#f0a575", "h-52"],
-  ["Letter A", "Letters", "16 x 16", "#7a5aa8", "h-44"],
-] as const;
 
 function Header() {
   return (
@@ -218,34 +158,16 @@ function EditorPreview() {
   );
 }
 
-function PatternSwatchCard({
-  pattern,
-}: {
-  pattern: (typeof featuredPatterns)[number];
-}) {
-  return (
-    <Link
-      className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm transition hover:border-[var(--accent)]"
-      href={pattern.href}
-    >
-      <span className="grid aspect-square grid-cols-3 gap-2 rounded-md bg-[var(--surface-soft)] p-4">
-        {Array.from({ length: 9 }).map((_, index) => (
-          <span
-            className="rounded-full border border-black/10"
-            key={`${pattern.title}-${index}`}
-            style={{ backgroundColor: pattern.colors[index % 3] }}
-          />
-        ))}
-      </span>
-      <span className="mt-4 block font-semibold">{pattern.title}</span>
-      <span className="mt-1 block text-sm text-[var(--muted)]">
-        {pattern.meta}
-      </span>
-    </Link>
-  );
-}
+export default async function Home() {
+  const [categories, publishedPatterns, guides] = await Promise.all([
+    getPublishedCategories(),
+    getPublishedPatternSummaries(),
+    getPublishedGuideSummaries(),
+  ]);
+  const featuredPatterns = publishedPatterns.slice(0, 4);
+  const patternFeed = publishedPatterns.slice(0, 12);
+  const featuredGuides = guides.slice(0, 3);
 
-export default function Home() {
   return (
     <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
       <Header />
@@ -289,18 +211,27 @@ export default function Home() {
 
       <section className="border-y border-[var(--border)] bg-[var(--surface)]">
         <div className="mx-auto grid w-full max-w-6xl gap-3 px-5 py-5 sm:grid-cols-3 md:grid-cols-6 md:px-8">
-          {categories.map((category) => (
-            <Link
-              className="rounded-md border border-[var(--border)] bg-white px-3 py-3 text-sm font-semibold transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
-              href={category.href}
-              key={category.name}
-            >
-              {category.name}
-              <span className="mt-1 block text-xs font-medium text-[var(--muted)]">
-                {category.count}
-              </span>
-            </Link>
-          ))}
+          {categories.length > 0 ? (
+            categories.slice(0, 6).map((category) => (
+              <Link
+                className="rounded-md border border-[var(--border)] bg-white px-3 py-3 text-sm font-semibold transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                href={`/categories/${category.slug}`}
+                key={category.id}
+              >
+                {category.name}
+                {category.description ? (
+                  <span className="mt-1 line-clamp-2 block text-xs font-medium text-[var(--muted)]">
+                    {category.description}
+                  </span>
+                ) : null}
+              </Link>
+            ))
+          ) : (
+            <div className="rounded-md border border-dashed border-[var(--border)] bg-white px-4 py-4 text-sm leading-6 text-[var(--muted)] sm:col-span-3 md:col-span-6">
+              Published categories will appear here after the first pattern
+              library content is ready.
+            </div>
+          )}
         </div>
       </section>
 
@@ -386,11 +317,24 @@ export default function Home() {
           </Link>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {featuredPatterns.map((pattern) => (
-            <PatternSwatchCard key={pattern.title} pattern={pattern} />
-          ))}
-        </div>
+        {featuredPatterns.length > 0 ? (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {featuredPatterns.map((pattern) => (
+              <PatternCard key={pattern.id} pattern={pattern} />
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--surface)] px-5 py-8">
+            <h2 className="text-xl font-semibold">
+              The public pattern library is being prepared.
+            </h2>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)]">
+              Featured patterns will appear here after they are published from
+              the admin CMS. Until then, Pinbead still offers the editor and
+              image converter as usable tools.
+            </p>
+          </div>
+        )}
       </section>
 
       <section className="border-y border-[var(--border)] bg-[var(--surface)]">
@@ -403,57 +347,44 @@ export default function Home() {
               Learn the basics before you print.
             </h2>
           </div>
-          <div className="grid gap-3 sm:grid-cols-3">
-            {guides.map((guide) => (
-              <Link
-                className="rounded-lg border border-[var(--border)] bg-white px-4 py-4 text-sm font-semibold shadow-sm transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
-                href={guide.href}
-                key={guide.title}
-              >
-                {guide.title}
-              </Link>
-            ))}
-          </div>
+          {featuredGuides.length > 0 ? (
+            <div className="grid gap-3 sm:grid-cols-3">
+              {featuredGuides.map((guide) => (
+                <Link
+                  className="rounded-lg border border-[var(--border)] bg-white px-4 py-4 text-sm font-semibold shadow-sm transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                  href={`/guides/${guide.slug}`}
+                  key={guide.id}
+                >
+                  {guide.title}
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-[var(--border)] bg-white px-4 py-4 text-sm leading-6 text-[var(--muted)]">
+              Published guides will appear here after the first tutorial drafts
+              are reviewed and published.
+            </div>
+          )}
         </div>
       </section>
 
-      <section className="mx-auto w-full max-w-6xl px-5 py-12 md:px-8">
-        <div className="max-w-2xl">
-          <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[var(--accent)]">
-            Featured feed
-          </p>
-          <h2 className="mt-3 text-3xl font-semibold">
-            Pattern picks for your next board.
-          </h2>
-        </div>
-        <div className="mt-6 columns-1 gap-4 sm:columns-2 lg:columns-3">
-          {masonryPatterns.map(([title, category, size, color, height]) => (
-            <Link
-              className={`mb-4 inline-block w-full break-inside-avoid rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm transition hover:border-[var(--accent)] ${height}`}
-              href="/patterns"
-              key={title}
-            >
-              <span
-                className="flex h-full min-h-28 flex-col justify-between rounded-md border border-black/10 p-4"
-                style={{ backgroundColor: color }}
-              >
-                <span className="text-sm font-semibold text-white drop-shadow">
-                  {category}
-                </span>
-                <span>
-                  <span className="block text-lg font-semibold text-white drop-shadow">
-                    {title}
-                  </span>
-                  <span className="mt-1 block text-sm font-medium text-white drop-shadow">
-                    {size}
-                  </span>
-                </span>
-              </span>
-            </Link>
-          ))}
-        </div>
-      </section>
+      {patternFeed.length > 4 ? (
+        <section className="mx-auto w-full max-w-6xl px-5 py-12 md:px-8">
+          <div className="max-w-2xl">
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[var(--accent)]">
+              Featured feed
+            </p>
+            <h2 className="mt-3 text-3xl font-semibold">
+              Pattern picks for your next board.
+            </h2>
+          </div>
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {patternFeed.slice(4).map((pattern) => (
+              <PatternCard key={pattern.id} pattern={pattern} />
+            ))}
+          </div>
+        </section>
+      ) : null}
     </main>
   );
 }
-

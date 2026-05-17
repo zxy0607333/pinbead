@@ -503,7 +503,7 @@ Pinbead 的方向调整为：
 - 分类页到图纸详情页内链完整。
 - 没有已发布内容的分类不进入公开导航和 sitemap。
 
-### [ ] 5.7 建立 `/pattern/[patternSlug]`
+### [x] 5.7 建立 `/pattern/[patternSlug]`
 
 需求：
 

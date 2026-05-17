@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
-import { logoutAdminAction } from "@/app/admin/actions";
-import { requireAdminSession } from "@/lib/admin/auth";
+import { AdminShell } from "@/components/admin/admin-shell";
 
 export const metadata: Metadata = {
   title: "Admin",
@@ -26,42 +26,30 @@ const adminSections = [
 ];
 
 export default async function AdminPage() {
-  const session = await requireAdminSession();
-
   return (
-    <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
-      <header className="border-b border-[var(--border)] bg-[var(--surface)]">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-5 py-4 md:px-8">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--accent)]">
-              Pinbead Admin
-            </p>
-            <p className="mt-1 text-sm text-[var(--muted)]">{session.email}</p>
-          </div>
-          <form action={logoutAdminAction}>
-            <button
-              className="rounded-md border border-[var(--border)] bg-white px-4 py-2 text-sm font-semibold transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
-              type="submit"
-            >
-              Sign out
-            </button>
-          </form>
-        </div>
-      </header>
-
+    <AdminShell>
       <section className="mx-auto w-full max-w-6xl px-5 py-8 md:px-8">
-        <div className="max-w-2xl">
-          <h1 className="text-3xl font-semibold">Content dashboard</h1>
-          <p className="mt-3 text-base leading-7 text-[var(--muted)]">
-            This private workspace will manage the pattern library, categories,
-            and guide content before public pages read from the database.
-          </p>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="max-w-2xl">
+            <h1 className="text-3xl font-semibold">Content dashboard</h1>
+            <p className="mt-3 text-base leading-7 text-[var(--muted)]">
+              This private workspace manages the pattern library, categories,
+              and guide content before public pages read from the database.
+            </p>
+          </div>
+          <Link
+            className="rounded-md bg-[var(--accent)] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[var(--accent-strong)]"
+            href="/admin/patterns/new"
+          >
+            New pattern
+          </Link>
         </div>
 
         <div className="mt-8 grid gap-4 md:grid-cols-3">
           {adminSections.map((section) => (
-            <article
+            <Link
               className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm"
+              href={section.title === "Patterns" ? "/admin/patterns" : "/admin"}
               key={section.title}
             >
               <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--accent)]">
@@ -71,10 +59,10 @@ export default async function AdminPage() {
               <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
                 {section.text}
               </p>
-            </article>
+            </Link>
           ))}
         </div>
       </section>
-    </main>
+    </AdminShell>
   );
 }

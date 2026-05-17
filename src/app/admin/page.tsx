@@ -21,7 +21,7 @@ const adminSections = [
   {
     title: "Guides",
     text: "Prepare tutorial articles for long-tail search pages.",
-    status: "Planned",
+    status: "Next",
   },
 ];
 
@@ -49,7 +49,13 @@ export default async function AdminPage() {
           {adminSections.map((section) => (
             <Link
               className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm"
-              href={section.title === "Patterns" ? "/admin/patterns" : "/admin"}
+              href={
+                section.title === "Patterns"
+                  ? "/admin/patterns"
+                  : section.title === "Guides"
+                    ? "/admin/guides"
+                    : "/admin"
+              }
               key={section.title}
             >
               <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--accent)]">

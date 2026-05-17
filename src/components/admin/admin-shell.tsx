@@ -6,6 +6,7 @@ import { requireAdminSession } from "@/lib/admin/auth";
 const adminNavItems = [
   { href: "/admin", label: "Dashboard" },
   { href: "/admin/patterns", label: "Patterns" },
+  { href: "/admin/guides", label: "Guides" },
 ];
 
 export async function AdminShell({

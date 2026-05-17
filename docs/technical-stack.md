@@ -252,6 +252,7 @@ npm run db:migrate
 常用命令：
 
 ```text
+npm run admin:hash-password -- "your-password"
 npm run db:generate   # 生成 Prisma Client
 npm run db:migrate    # 本地开发迁移
 npm run db:deploy     # 服务器部署时应用已有迁移
@@ -266,6 +267,23 @@ npm run db:studio     # 打开 Prisma Studio
 - `Guide`：教程内容和发布状态。
 
 `src/lib/db` 是查询层入口，公开页面后续只读取 `published` 状态的数据。
+
+## 管理员登录
+
+第一版后台登录使用自建管理员认证：
+
+- `/admin/login` 提交邮箱和密码。
+- 密码使用 scrypt 哈希，哈希值写入 `ADMIN_PASSWORD_HASH` 或数据库 `AdminUser.passwordHash`。
+- 第一次登录时，如果数据库里还没有该管理员，但 `.env` 中的 `ADMIN_EMAIL` 和 `ADMIN_PASSWORD_HASH` 验证通过，会自动创建 `AdminUser`。
+- 登录后写入 `httpOnly`、`sameSite=lax` 的签名 cookie。
+- `/admin` 页面服务端校验登录态，未登录会跳转到 `/admin/login`。
+- 后台写操作通过同源校验降低 CSRF 风险，登录失败有基础内存限流。
+
+生成首个管理员密码哈希：
+
+```text
+npm run admin:hash-password -- "replace-with-a-strong-password"
+```
 
 本地上传可以作为第一版起步方案，但必须明确持久化边界：
 

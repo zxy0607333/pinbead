@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "admin:hash-password": "node scripts/hash-admin-password.mjs",
     "dev": "next dev -H 0.0.0.0 -p 3000",
     "build": "next build",
     "db:deploy": "prisma migrate deploy",

@@ -1,44 +1,19 @@
 import { redirect } from "next/navigation";
 
+import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db/prisma";
 
 import { getAdminSession } from "./session";
-import { verifyAdminPassword } from "./password";
+import { hashAdminPassword, verifyAdminPassword } from "./password";
 
-function normalizeAdminEmail(email: string) {
+export function normalizeAdminEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
-async function bootstrapAdminFromEnv(email: string, password: string) {
-  const envEmail = normalizeAdminEmail(process.env.ADMIN_EMAIL ?? "");
-  const envPasswordHash = process.env.ADMIN_PASSWORD_HASH;
+export async function hasAdminUsers() {
+  const adminUserCount = await prisma.adminUser.count();
 
-  if (!envEmail || !envPasswordHash || normalizeAdminEmail(email) !== envEmail) {
-    return null;
-  }
-
-  const isValidPassword = await verifyAdminPassword(password, envPasswordHash);
-
-  if (!isValidPassword) {
-    return null;
-  }
-
-  return prisma.adminUser.upsert({
-    where: {
-      email: envEmail,
-    },
-    create: {
-      email: envEmail,
-      passwordHash: envPasswordHash,
-    },
-    update: {
-      passwordHash: envPasswordHash,
-    },
-    select: {
-      id: true,
-      email: true,
-    },
-  });
+  return adminUserCount > 0;
 }
 
 export async function authenticateAdmin(email: string, password: string) {
@@ -70,7 +45,42 @@ export async function authenticateAdmin(email: string, password: string) {
     };
   }
 
-  return bootstrapAdminFromEnv(normalizedEmail, password);
+  return null;
+}
+
+export async function createFirstAdmin({
+  email,
+  password,
+}: {
+  email: string;
+  password: string;
+}) {
+  const normalizedEmail = normalizeAdminEmail(email);
+  const passwordHash = await hashAdminPassword(password);
+
+  return prisma.$transaction(
+    async (tx) => {
+      const adminUserCount = await tx.adminUser.count();
+
+      if (adminUserCount > 0) {
+        throw new Error("主号已经创建，不能重复初始化。");
+      }
+
+      return tx.adminUser.create({
+        data: {
+          email: normalizedEmail,
+          passwordHash,
+        },
+        select: {
+          id: true,
+          email: true,
+        },
+      });
+    },
+    {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    },
+  );
 }
 
 export async function requireAdminSession() {

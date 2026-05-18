@@ -22,6 +22,7 @@ Pinbead 是一个拼豆图纸编辑器、可打印拼豆图库，以及图片导
 - [产品规划](./product-plan.md)：产品定位、用户路径、首页策略、编辑器优先原则和内容来源。
 - [技术栈与架构](./technical-stack.md)：自有服务器部署、编辑器模型、图片导入、导出和后续后端规划。
 - [后台 CMS 规划](./admin-cms-plan.md)：自用后台、图纸发布流程、数据模型和管理员内容管理范围。
+- [Docker 和 Portainer 部署](./docker-deployment.md)：本地 Docker、镜像构建、Portainer Stack 和上传目录说明。
 - [版本路线图](./roadmap.md)：从当前原型调整到编辑器优先、SEO 内容站和社区化的路线。
 - [内容、SEO 与 AdSense](./content-seo-adsense.md)：URL 结构、页面矩阵、分类策略、图纸内容和广告策略。
 - [AdSense 上线前体检](./adsense-readiness-audit.md)：提交审核前的页面、内容、广告位和合规检查。

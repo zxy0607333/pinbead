@@ -28,6 +28,16 @@ type GuideFormGuide = {
 
 const initialState: GuideFormState = {};
 
+function formatContentStatus(status: ContentStatus) {
+  const statusLabels: Record<ContentStatus, string> = {
+    [ContentStatus.DRAFT]: "草稿",
+    [ContentStatus.PUBLISHED]: "已发布",
+    [ContentStatus.ARCHIVED]: "已归档",
+  };
+
+  return statusLabels[status];
+}
+
 function FieldLabel({
   children,
   label,
@@ -66,7 +76,7 @@ function SubmitButton({
       type="submit"
       value={intent}
     >
-      {pending ? "Saving..." : children}
+      {pending ? "保存中..." : children}
     </button>
   );
 }
@@ -84,7 +94,7 @@ export function GuideForm({
     <form action={formAction} className="grid gap-6">
       <section className="grid gap-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm">
         <div className="grid gap-4 md:grid-cols-2">
-          <FieldLabel label="Title">
+          <FieldLabel label="标题">
             <input
               className="rounded-md border border-[var(--border)] px-3 py-3 font-normal outline-none focus:border-[var(--accent)]"
               defaultValue={guide?.title ?? ""}
@@ -92,7 +102,7 @@ export function GuideForm({
               required
             />
           </FieldLabel>
-          <FieldLabel label="Slug">
+          <FieldLabel label="Slug（URL 标识）">
             <input
               className="rounded-md border border-[var(--border)] px-3 py-3 font-normal outline-none focus:border-[var(--accent)]"
               defaultValue={guide?.slug ?? ""}
@@ -104,14 +114,14 @@ export function GuideForm({
         </div>
 
         <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_180px]">
-          <FieldLabel label="Summary">
+          <FieldLabel label="摘要">
             <textarea
               className="min-h-24 rounded-md border border-[var(--border)] px-3 py-3 font-normal leading-6 outline-none focus:border-[var(--accent)]"
               defaultValue={guide?.summary ?? ""}
               name="summary"
             />
           </FieldLabel>
-          <FieldLabel label="Status">
+          <FieldLabel label="状态">
             <select
               className="rounded-md border border-[var(--border)] bg-white px-3 py-3 font-normal outline-none focus:border-[var(--accent)]"
               defaultValue={guide?.status ?? ContentStatus.DRAFT}
@@ -119,7 +129,7 @@ export function GuideForm({
             >
               {Object.values(ContentStatus).map((status) => (
                 <option key={status} value={status}>
-                  {status.toLowerCase()}
+                  {formatContentStatus(status)}
                 </option>
               ))}
             </select>
@@ -128,7 +138,7 @@ export function GuideForm({
       </section>
 
       <section className="grid gap-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm">
-        <FieldLabel label="Content">
+        <FieldLabel label="正文内容">
           <textarea
             className="min-h-[420px] rounded-md border border-[var(--border)] px-3 py-3 font-normal leading-7 outline-none focus:border-[var(--accent)]"
             defaultValue={guide?.content ?? ""}
@@ -139,14 +149,14 @@ export function GuideForm({
 
       <section className="grid gap-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm">
         <div className="grid gap-4 md:grid-cols-2">
-          <FieldLabel label="SEO title">
+          <FieldLabel label="SEO 标题">
             <input
               className="rounded-md border border-[var(--border)] px-3 py-3 font-normal outline-none focus:border-[var(--accent)]"
               defaultValue={guide?.seoTitle ?? ""}
               name="seoTitle"
             />
           </FieldLabel>
-          <FieldLabel label="SEO description">
+          <FieldLabel label="SEO 描述">
             <textarea
               className="min-h-24 rounded-md border border-[var(--border)] px-3 py-3 font-normal leading-6 outline-none focus:border-[var(--accent)]"
               defaultValue={guide?.seoDescription ?? ""}
@@ -168,10 +178,10 @@ export function GuideForm({
       ) : null}
 
       <div className="flex flex-wrap justify-end gap-3">
-        <SubmitButton intent="archive">Archive</SubmitButton>
-        <SubmitButton intent="draft">Save draft</SubmitButton>
+        <SubmitButton intent="archive">归档</SubmitButton>
+        <SubmitButton intent="draft">保存草稿</SubmitButton>
         <SubmitButton intent="publish" variant="primary">
-          Publish
+          发布
         </SubmitButton>
       </div>
     </form>

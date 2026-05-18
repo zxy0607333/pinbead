@@ -11,7 +11,7 @@ export async function assertSameOriginRequest() {
   }
 
   if (new URL(origin).host !== host) {
-    throw new Error("Invalid request origin.");
+    throw new Error("请求来源无效。");
   }
 }
 

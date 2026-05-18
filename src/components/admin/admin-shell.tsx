@@ -4,9 +4,9 @@ import { logoutAdminAction } from "@/app/admin/actions";
 import { requireAdminSession } from "@/lib/admin/auth";
 
 const adminNavItems = [
-  { href: "/admin", label: "Dashboard" },
-  { href: "/admin/patterns", label: "Patterns" },
-  { href: "/admin/guides", label: "Guides" },
+  { href: "/admin", label: "概览" },
+  { href: "/admin/patterns", label: "图纸" },
+  { href: "/admin/guides", label: "教程" },
 ];
 
 export async function AdminShell({
@@ -25,7 +25,7 @@ export async function AdminShell({
               className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--accent)]"
               href="/admin"
             >
-              Pinbead Admin
+              Pinbead 后台
             </Link>
             <p className="mt-1 text-sm text-[var(--muted)]">{session.email}</p>
           </div>
@@ -44,7 +44,7 @@ export async function AdminShell({
                 className="rounded-md border border-[var(--border)] bg-white px-3 py-2 transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
                 type="submit"
               >
-                Sign out
+                退出登录
               </button>
             </form>
           </nav>

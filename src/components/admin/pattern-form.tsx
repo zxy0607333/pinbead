@@ -50,6 +50,39 @@ type PatternFormPattern = {
 
 const initialState: PatternFormState = {};
 
+function formatContentStatus(status: ContentStatus) {
+  const statusLabels: Record<ContentStatus, string> = {
+    [ContentStatus.DRAFT]: "草稿",
+    [ContentStatus.PUBLISHED]: "已发布",
+    [ContentStatus.ARCHIVED]: "已归档",
+  };
+
+  return statusLabels[status];
+}
+
+function formatDifficulty(difficulty: PatternDifficulty) {
+  const difficultyLabels: Record<PatternDifficulty, string> = {
+    [PatternDifficulty.BEGINNER]: "新手",
+    [PatternDifficulty.EASY]: "简单",
+    [PatternDifficulty.MEDIUM]: "中等",
+    [PatternDifficulty.HARD]: "困难",
+  };
+
+  return difficultyLabels[difficulty];
+}
+
+function formatSourceType(sourceType: PatternSourceType) {
+  const sourceTypeLabels: Record<PatternSourceType, string> = {
+    [PatternSourceType.ORIGINAL]: "原创",
+    [PatternSourceType.AI_ASSISTED]: "AI 辅助",
+    [PatternSourceType.PUBLIC_DOMAIN]: "公共领域",
+    [PatternSourceType.LICENSED]: "已授权",
+    [PatternSourceType.USER_SUBMISSION]: "用户投稿",
+  };
+
+  return sourceTypeLabels[sourceType];
+}
+
 function FieldLabel({
   children,
   label,
@@ -88,7 +121,7 @@ function SubmitButton({
       type="submit"
       value={intent}
     >
-      {pending ? "Saving..." : children}
+      {pending ? "保存中..." : children}
     </button>
   );
 }
@@ -99,7 +132,7 @@ function createDefaultPatternJson(pattern?: PatternFormPattern) {
 
   return {
     version: 1,
-    title: pattern?.title ?? "Untitled Pattern",
+    title: pattern?.title ?? "未命名图纸",
     width,
     height,
     paletteId: pattern?.paletteId ?? defaultBeadPaletteId,
@@ -128,7 +161,7 @@ export function PatternForm({
     <form action={formAction} className="grid gap-6">
       <section className="grid gap-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm">
         <div className="grid gap-4 md:grid-cols-2">
-          <FieldLabel label="Title">
+          <FieldLabel label="标题">
             <input
               className="rounded-md border border-[var(--border)] px-3 py-3 font-normal outline-none focus:border-[var(--accent)]"
               defaultValue={pattern?.title ?? ""}
@@ -136,7 +169,7 @@ export function PatternForm({
               required
             />
           </FieldLabel>
-          <FieldLabel label="Slug">
+          <FieldLabel label="Slug（URL 标识）">
             <input
               className="rounded-md border border-[var(--border)] px-3 py-3 font-normal outline-none focus:border-[var(--accent)]"
               defaultValue={pattern?.slug ?? ""}
@@ -147,7 +180,7 @@ export function PatternForm({
           </FieldLabel>
         </div>
 
-        <FieldLabel label="Summary">
+        <FieldLabel label="摘要">
           <textarea
             className="min-h-24 rounded-md border border-[var(--border)] px-3 py-3 font-normal leading-6 outline-none focus:border-[var(--accent)]"
             defaultValue={pattern?.summary ?? ""}
@@ -155,7 +188,7 @@ export function PatternForm({
           />
         </FieldLabel>
 
-        <FieldLabel label="Description">
+        <FieldLabel label="说明正文">
           <textarea
             className="min-h-40 rounded-md border border-[var(--border)] px-3 py-3 font-normal leading-6 outline-none focus:border-[var(--accent)]"
             defaultValue={pattern?.description ?? ""}
@@ -166,13 +199,13 @@ export function PatternForm({
 
       <section className="grid gap-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm">
         <div className="grid gap-4 md:grid-cols-3">
-          <FieldLabel label="Category">
+          <FieldLabel label="分类">
             <select
               className="rounded-md border border-[var(--border)] bg-white px-3 py-3 font-normal outline-none focus:border-[var(--accent)]"
               defaultValue={pattern?.categoryId ?? ""}
               name="categoryId"
             >
-              <option value="">No category</option>
+              <option value="">不选择分类</option>
               {categories.map((category) => (
                 <option key={category.id} value={category.id}>
                   {category.name}
@@ -181,7 +214,7 @@ export function PatternForm({
             </select>
           </FieldLabel>
 
-          <FieldLabel label="Difficulty">
+          <FieldLabel label="难度">
             <select
               className="rounded-md border border-[var(--border)] bg-white px-3 py-3 font-normal outline-none focus:border-[var(--accent)]"
               defaultValue={pattern?.difficulty ?? PatternDifficulty.BEGINNER}
@@ -189,13 +222,13 @@ export function PatternForm({
             >
               {Object.values(PatternDifficulty).map((difficulty) => (
                 <option key={difficulty} value={difficulty}>
-                  {difficulty.toLowerCase()}
+                  {formatDifficulty(difficulty)}
                 </option>
               ))}
             </select>
           </FieldLabel>
 
-          <FieldLabel label="Status">
+          <FieldLabel label="状态">
             <select
               className="rounded-md border border-[var(--border)] bg-white px-3 py-3 font-normal outline-none focus:border-[var(--accent)]"
               defaultValue={pattern?.status ?? ContentStatus.DRAFT}
@@ -203,7 +236,7 @@ export function PatternForm({
             >
               {Object.values(ContentStatus).map((status) => (
                 <option key={status} value={status}>
-                  {status.toLowerCase()}
+                  {formatContentStatus(status)}
                 </option>
               ))}
             </select>
@@ -211,7 +244,7 @@ export function PatternForm({
         </div>
 
         <div className="grid gap-4 md:grid-cols-4">
-          <FieldLabel label="Width">
+          <FieldLabel label="宽度">
             <input
               className="rounded-md border border-[var(--border)] px-3 py-3 font-normal outline-none focus:border-[var(--accent)]"
               defaultValue={pattern?.width ?? 24}
@@ -221,7 +254,7 @@ export function PatternForm({
               type="number"
             />
           </FieldLabel>
-          <FieldLabel label="Height">
+          <FieldLabel label="高度">
             <input
               className="rounded-md border border-[var(--border)] px-3 py-3 font-normal outline-none focus:border-[var(--accent)]"
               defaultValue={pattern?.height ?? 24}
@@ -231,7 +264,7 @@ export function PatternForm({
               type="number"
             />
           </FieldLabel>
-          <FieldLabel label="Color count">
+          <FieldLabel label="颜色数量">
             <input
               className="rounded-md border border-[var(--border)] px-3 py-3 font-normal outline-none focus:border-[var(--accent)]"
               defaultValue={pattern?.colorCount ?? 0}
@@ -240,7 +273,7 @@ export function PatternForm({
               type="number"
             />
           </FieldLabel>
-          <FieldLabel label="Bead count">
+          <FieldLabel label="用豆数量">
             <input
               className="rounded-md border border-[var(--border)] px-3 py-3 font-normal outline-none focus:border-[var(--accent)]"
               defaultValue={pattern?.beadCount ?? 0}
@@ -252,7 +285,7 @@ export function PatternForm({
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
-          <FieldLabel label="Palette">
+          <FieldLabel label="色卡">
             <select
               className="rounded-md border border-[var(--border)] bg-white px-3 py-3 font-normal outline-none focus:border-[var(--accent)]"
               defaultValue={pattern?.paletteId ?? defaultBeadPaletteId}
@@ -266,7 +299,7 @@ export function PatternForm({
             </select>
           </FieldLabel>
 
-          <FieldLabel label="Source type">
+          <FieldLabel label="来源类型">
             <select
               className="rounded-md border border-[var(--border)] bg-white px-3 py-3 font-normal outline-none focus:border-[var(--accent)]"
               defaultValue={pattern?.sourceType ?? PatternSourceType.ORIGINAL}
@@ -274,7 +307,7 @@ export function PatternForm({
             >
               {Object.values(PatternSourceType).map((sourceType) => (
                 <option key={sourceType} value={sourceType}>
-                  {sourceType.toLowerCase()}
+                  {formatSourceType(sourceType)}
                 </option>
               ))}
             </select>
@@ -283,7 +316,7 @@ export function PatternForm({
       </section>
 
       <section className="grid gap-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm">
-        <FieldLabel label="Pattern JSON">
+        <FieldLabel label="图纸 JSON">
           <textarea
             className="min-h-80 rounded-md border border-[var(--border)] px-3 py-3 font-mono text-xs font-normal leading-5 outline-none focus:border-[var(--accent)]"
             defaultValue={cellsJson}
@@ -296,7 +329,7 @@ export function PatternForm({
       <section className="grid gap-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm">
         <div className="grid gap-4 md:grid-cols-2">
           <div className="grid gap-2">
-            <FieldLabel label="Preview image">
+            <FieldLabel label="预览图">
               <input
                 accept="image/png,image/jpeg,image/webp"
                 className="rounded-md border border-[var(--border)] bg-white px-3 py-3 font-normal"
@@ -316,13 +349,13 @@ export function PatternForm({
                 rel="noreferrer"
                 target="_blank"
               >
-                Current preview
+                查看当前预览图
               </a>
             ) : null}
           </div>
 
           <div className="grid gap-2">
-            <FieldLabel label="Download file">
+            <FieldLabel label="下载文件">
               <input
                 accept="image/png,image/jpeg,image/webp,application/pdf,application/json"
                 className="rounded-md border border-[var(--border)] bg-white px-3 py-3 font-normal"
@@ -342,7 +375,7 @@ export function PatternForm({
                 rel="noreferrer"
                 target="_blank"
               >
-                Current download
+                查看当前下载文件
               </a>
             ) : null}
           </div>
@@ -351,14 +384,14 @@ export function PatternForm({
 
       <section className="grid gap-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm">
         <div className="grid gap-4 md:grid-cols-2">
-          <FieldLabel label="SEO title">
+          <FieldLabel label="SEO 标题">
             <input
               className="rounded-md border border-[var(--border)] px-3 py-3 font-normal outline-none focus:border-[var(--accent)]"
               defaultValue={pattern?.seoTitle ?? ""}
               name="seoTitle"
             />
           </FieldLabel>
-          <FieldLabel label="SEO description">
+          <FieldLabel label="SEO 描述">
             <textarea
               className="min-h-24 rounded-md border border-[var(--border)] px-3 py-3 font-normal leading-6 outline-none focus:border-[var(--accent)]"
               defaultValue={pattern?.seoDescription ?? ""}
@@ -380,10 +413,10 @@ export function PatternForm({
       ) : null}
 
       <div className="flex flex-wrap justify-end gap-3">
-        <SubmitButton intent="archive">Archive</SubmitButton>
-        <SubmitButton intent="draft">Save draft</SubmitButton>
+        <SubmitButton intent="archive">归档</SubmitButton>
+        <SubmitButton intent="draft">保存草稿</SubmitButton>
         <SubmitButton intent="publish" variant="primary">
-          Publish
+          发布
         </SubmitButton>
       </div>
     </form>

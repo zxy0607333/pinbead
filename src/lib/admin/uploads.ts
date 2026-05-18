@@ -156,18 +156,18 @@ function readImageSize(buffer: Buffer, contentType: string) {
 
 function validateUploadBuffer(buffer: Buffer, contentType: string) {
   if (buffer.length > maxUploadBytes) {
-    throw new Error("Upload must be 10 MB or smaller.");
+    throw new Error("上传文件不能超过 10 MB。");
   }
 
   if (contentType.startsWith("image/")) {
     const size = readImageSize(buffer, contentType);
 
     if (!size) {
-      throw new Error("Image dimensions could not be verified.");
+      throw new Error("无法校验图片尺寸。");
     }
 
     if (size.width > maxImageSide || size.height > maxImageSide) {
-      throw new Error("Image dimensions must be 4096 x 4096 or smaller.");
+      throw new Error("图片尺寸不能超过 4096 x 4096。");
     }
   }
 }
@@ -177,7 +177,7 @@ function resolveStoredUploadPath(relativePath: string[]) {
   const filePath = path.resolve(root, ...relativePath);
 
   if (!filePath.startsWith(`${root}${path.sep}`)) {
-    throw new Error("Invalid upload path.");
+    throw new Error("上传路径无效。");
   }
 
   return filePath;
@@ -191,11 +191,11 @@ export async function storeAdminUpload(file: File, kind: UploadKind) {
   const extension = allowedUploadTypes.get(file.type);
 
   if (!extension) {
-    throw new Error("Unsupported upload file type.");
+    throw new Error("不支持的上传文件类型。");
   }
 
   if (kind === "previews" && !file.type.startsWith("image/")) {
-    throw new Error("Preview uploads must be images.");
+    throw new Error("预览图只能上传图片。");
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());

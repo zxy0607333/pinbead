@@ -82,7 +82,7 @@ function parsePositiveInteger(value: string, fieldName: string) {
   const parsedValue = Number(value);
 
   if (!Number.isInteger(parsedValue) || parsedValue <= 0) {
-    throw new Error(`${fieldName} must be a positive number.`);
+    throw new Error(`${fieldName} 必须是正整数。`);
   }
 
   return parsedValue;
@@ -96,7 +96,7 @@ function parseOptionalNonNegativeInteger(value: string, fieldName: string) {
   const parsedValue = Number(value);
 
   if (!Number.isInteger(parsedValue) || parsedValue < 0) {
-    throw new Error(`${fieldName} must be zero or a positive number.`);
+    throw new Error(`${fieldName} 必须是 0 或正整数。`);
   }
 
   return parsedValue;
@@ -160,17 +160,17 @@ function normalizePatternJson({
     : parsedJson;
 
   if (!isJsonObject(patternJson)) {
-    throw new Error("Pattern JSON must be an object.");
+    throw new Error("图纸 JSON 必须是一个对象。");
   }
 
   const cells = patternJson.cells;
 
   if (!Array.isArray(cells)) {
-    throw new Error("Pattern JSON must include a cells array.");
+    throw new Error("图纸 JSON 必须包含 cells 数组。");
   }
 
   if (cells.length !== width * height) {
-    throw new Error("Pattern JSON cell count must match width x height.");
+    throw new Error("图纸 JSON 的格子数量必须等于宽度 x 高度。");
   }
 
   const normalizedCells = cells.map((cell) =>
@@ -196,7 +196,7 @@ function normalizePatternJson({
 
 function validateSlug(slug: string) {
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
-    throw new Error("Slug must use lowercase letters, numbers, and hyphens.");
+    throw new Error("Slug 只能使用小写字母、数字和连字符。");
   }
 }
 
@@ -212,10 +212,10 @@ async function getPatternFormData(
   const summary = getFormString(formData, "summary") || null;
   const description = getFormString(formData, "description") || null;
   const categoryId = getFormString(formData, "categoryId") || null;
-  const width = parsePositiveInteger(getFormString(formData, "width"), "Width");
+  const width = parsePositiveInteger(getFormString(formData, "width"), "宽度");
   const height = parsePositiveInteger(
     getFormString(formData, "height"),
-    "Height",
+    "高度",
   );
   const paletteId = getFormString(formData, "paletteId") || defaultBeadPaletteId;
   const cellsJsonText = getFormString(formData, "cellsJson");
@@ -247,11 +247,11 @@ async function getPatternFormData(
           : selectedStatus;
 
   if (!title) {
-    throw new Error("Title is required.");
+    throw new Error("请填写标题。");
   }
 
   if (!slug) {
-    throw new Error("Slug is required.");
+    throw new Error("请填写 slug。");
   }
 
   validateSlug(slug);
@@ -267,7 +267,7 @@ async function getPatternFormData(
   });
 
   if (existingSlugPattern) {
-    throw new Error("Slug is already used by another pattern.");
+    throw new Error("这个 slug 已经被其他图纸使用。");
   }
 
   const normalizedPatternJson = normalizePatternJson({
@@ -280,11 +280,11 @@ async function getPatternFormData(
 
   const manualColorCount = parseOptionalNonNegativeInteger(
     getFormString(formData, "colorCount"),
-    "Color count",
+    "颜色数量",
   );
   const manualBeadCount = parseOptionalNonNegativeInteger(
     getFormString(formData, "beadCount"),
-    "Bead count",
+    "用豆数量",
   );
   const previewImageUrl = getFormString(formData, "existingPreviewImageUrl");
   const downloadImageUrl = getFormString(formData, "existingDownloadImageUrl");
@@ -301,15 +301,15 @@ async function getPatternFormData(
 
   if (status === ContentStatus.PUBLISHED) {
     if (!categoryId) {
-      throw new Error("Published patterns need a category.");
+      throw new Error("发布图纸前必须选择分类。");
     }
 
     if (!summary || !description || !seoTitle || !seoDescription) {
-      throw new Error("Published patterns need summary, description, and SEO fields.");
+      throw new Error("发布图纸前必须填写摘要、说明正文和 SEO 字段。");
     }
 
     if (!nextPreviewImageUrl) {
-      throw new Error("Published patterns need a preview image.");
+      throw new Error("发布图纸前必须上传预览图。");
     }
   }
 
@@ -364,7 +364,7 @@ export async function createPatternAction(
       error:
         error instanceof Error
           ? error.message
-          : "Pattern could not be created.",
+          : "图纸创建失败。",
     };
   }
 
@@ -390,14 +390,14 @@ export async function updatePatternAction(
     revalidatePath(`/admin/patterns/${patternId}`);
 
     return {
-      success: "Pattern saved.",
+      success: "图纸已保存。",
     };
   } catch (error) {
     return {
       error:
         error instanceof Error
           ? error.message
-          : "Pattern could not be saved.",
+          : "图纸保存失败。",
     };
   }
 }

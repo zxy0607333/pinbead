@@ -8,7 +8,7 @@ import { requireAdminSession } from "@/lib/admin/auth";
 import { prisma } from "@/lib/db/prisma";
 
 export const metadata: Metadata = {
-  title: "Patterns",
+  title: "图纸管理",
 };
 
 type AdminPatternsPageProps = {
@@ -27,6 +27,16 @@ function getStatusFilter(status?: string) {
   return Object.values(ContentStatus).includes(status as ContentStatus)
     ? (status as ContentStatus)
     : undefined;
+}
+
+function formatStatus(status: ContentStatus) {
+  const statusLabels: Record<ContentStatus, string> = {
+    [ContentStatus.DRAFT]: "草稿",
+    [ContentStatus.PUBLISHED]: "已发布",
+    [ContentStatus.ARCHIVED]: "已归档",
+  };
+
+  return statusLabels[status];
 }
 
 export default async function AdminPatternsPage({
@@ -76,17 +86,16 @@ export default async function AdminPatternsPage({
       <section className="mx-auto w-full max-w-6xl px-5 py-8 md:px-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-semibold">Patterns</h1>
+            <h1 className="text-3xl font-semibold">图纸管理</h1>
             <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-              Manage pattern drafts, metadata, publishing status, and upload
-              assets.
+              管理图纸草稿、元数据、发布状态、预览图和下载文件。
             </p>
           </div>
           <Link
             className="rounded-md bg-[var(--accent)] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[var(--accent-strong)]"
             href="/admin/patterns/new"
           >
-            New pattern
+            新建图纸
           </Link>
         </div>
 
@@ -96,14 +105,13 @@ export default async function AdminPatternsPage({
             className="mt-6 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm"
           >
             <p className="text-sm leading-6 text-[var(--muted)]">
-              No categories exist yet. Add starter categories so published
-              patterns can pass validation.
+              当前还没有分类。先创建基础分类，发布图纸时才能通过校验。
             </p>
             <button
               className="mt-3 rounded-md border border-[var(--border)] bg-white px-4 py-2 text-sm font-semibold transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
               type="submit"
             >
-              Create starter categories
+              创建基础分类
             </button>
           </form>
         ) : null}
@@ -113,17 +121,17 @@ export default async function AdminPatternsPage({
             className="rounded-md border border-[var(--border)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
             defaultValue={query}
             name="q"
-            placeholder="Search title, slug, summary"
+            placeholder="搜索标题、slug、摘要"
           />
           <select
             className="rounded-md border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
             defaultValue={status}
             name="status"
           >
-            <option value="all">All status</option>
+            <option value="all">全部状态</option>
             {Object.values(ContentStatus).map((statusOption) => (
               <option key={statusOption} value={statusOption}>
-                {statusOption.toLowerCase()}
+                {formatStatus(statusOption)}
               </option>
             ))}
           </select>
@@ -132,7 +140,7 @@ export default async function AdminPatternsPage({
             defaultValue={categoryId}
             name="categoryId"
           >
-            <option value="">All categories</option>
+            <option value="">全部分类</option>
             {categories.map((category) => (
               <option key={category.id} value={category.id}>
                 {category.name}
@@ -143,16 +151,16 @@ export default async function AdminPatternsPage({
             className="rounded-md border border-[var(--border)] bg-white px-4 py-2 text-sm font-semibold transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
             type="submit"
           >
-            Filter
+            筛选
           </button>
         </form>
 
         <div className="mt-6 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface)] shadow-sm">
           <div className="grid grid-cols-[1fr_130px_120px_120px] gap-4 border-b border-[var(--border)] px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">
-            <span>Pattern</span>
-            <span>Status</span>
-            <span>Category</span>
-            <span>Updated</span>
+            <span>图纸</span>
+            <span>状态</span>
+            <span>分类</span>
+            <span>更新</span>
           </div>
           {patterns.length > 0 ? (
             patterns.map((pattern) => (
@@ -167,14 +175,16 @@ export default async function AdminPatternsPage({
                     /pattern/{pattern.slug} · {pattern.width} x {pattern.height}
                   </span>
                 </span>
-                <span className="font-semibold">{pattern.status.toLowerCase()}</span>
-                <span>{pattern.category?.name ?? "None"}</span>
-                <span>{pattern.updatedAt.toLocaleDateString("en-US")}</span>
+                <span className="font-semibold">
+                  {formatStatus(pattern.status)}
+                </span>
+                <span>{pattern.category?.name ?? "未分类"}</span>
+                <span>{pattern.updatedAt.toLocaleDateString("zh-CN")}</span>
               </Link>
             ))
           ) : (
             <div className="px-4 py-10 text-center text-sm text-[var(--muted)]">
-              No patterns found.
+              没有找到图纸。
             </div>
           )}
         </div>

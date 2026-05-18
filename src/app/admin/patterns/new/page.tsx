@@ -7,7 +7,7 @@ import { requireAdminSession } from "@/lib/admin/auth";
 import { prisma } from "@/lib/db/prisma";
 
 export const metadata: Metadata = {
-  title: "New Pattern",
+  title: "新建图纸",
 };
 
 export default async function NewPatternPage() {
@@ -26,10 +26,9 @@ export default async function NewPatternPage() {
     <AdminShell>
       <section className="mx-auto w-full max-w-4xl px-5 py-8 md:px-8">
         <div className="mb-6">
-          <h1 className="text-3xl font-semibold">New pattern</h1>
+          <h1 className="text-3xl font-semibold">新建图纸</h1>
           <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-            Create a draft, add the pattern JSON, and publish when metadata and
-            assets are ready.
+            先创建草稿，补充图纸 JSON、元数据和素材后再发布。
           </p>
         </div>
         <PatternForm action={createPatternAction} categories={categories} />

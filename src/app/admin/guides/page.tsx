@@ -8,7 +8,7 @@ import { requireAdminSession } from "@/lib/admin/auth";
 import { prisma } from "@/lib/db/prisma";
 
 export const metadata: Metadata = {
-  title: "Guides",
+  title: "教程管理",
 };
 
 type AdminGuidesPageProps = {
@@ -26,6 +26,16 @@ function getStatusFilter(status?: string) {
   return Object.values(ContentStatus).includes(status as ContentStatus)
     ? (status as ContentStatus)
     : undefined;
+}
+
+function formatStatus(status: ContentStatus) {
+  const statusLabels: Record<ContentStatus, string> = {
+    [ContentStatus.DRAFT]: "草稿",
+    [ContentStatus.PUBLISHED]: "已发布",
+    [ContentStatus.ARCHIVED]: "已归档",
+  };
+
+  return statusLabels[status];
 }
 
 export default async function AdminGuidesPage({
@@ -56,16 +66,16 @@ export default async function AdminGuidesPage({
       <section className="mx-auto w-full max-w-6xl px-5 py-8 md:px-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-semibold">Guides</h1>
+            <h1 className="text-3xl font-semibold">教程管理</h1>
             <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-              Manage tutorial drafts, SEO fields, and publishing status.
+              管理教程草稿、SEO 字段和发布状态。
             </p>
           </div>
           <Link
             className="rounded-md bg-[var(--accent)] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[var(--accent-strong)]"
             href="/admin/guides/new"
           >
-            New guide
+            新建教程
           </Link>
         </div>
 
@@ -75,14 +85,13 @@ export default async function AdminGuidesPage({
             className="mt-6 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm"
           >
             <p className="text-sm leading-6 text-[var(--muted)]">
-              No guides exist yet. Seed the first five guide drafts from the
-              launch plan.
+              当前还没有教程。可以先按上线计划创建首批 5 篇教程草稿。
             </p>
             <button
               className="mt-3 rounded-md border border-[var(--border)] bg-white px-4 py-2 text-sm font-semibold transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
               type="submit"
             >
-              Create starter guide drafts
+              创建首批教程草稿
             </button>
           </form>
         ) : null}
@@ -92,17 +101,17 @@ export default async function AdminGuidesPage({
             className="rounded-md border border-[var(--border)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
             defaultValue={query}
             name="q"
-            placeholder="Search title, slug, summary"
+            placeholder="搜索标题、slug、摘要"
           />
           <select
             className="rounded-md border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
             defaultValue={status}
             name="status"
           >
-            <option value="all">All status</option>
+            <option value="all">全部状态</option>
             {Object.values(ContentStatus).map((statusOption) => (
               <option key={statusOption} value={statusOption}>
-                {statusOption.toLowerCase()}
+                {formatStatus(statusOption)}
               </option>
             ))}
           </select>
@@ -110,15 +119,15 @@ export default async function AdminGuidesPage({
             className="rounded-md border border-[var(--border)] bg-white px-4 py-2 text-sm font-semibold transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
             type="submit"
           >
-            Filter
+            筛选
           </button>
         </form>
 
         <div className="mt-6 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface)] shadow-sm">
           <div className="grid grid-cols-[1fr_130px_120px] gap-4 border-b border-[var(--border)] px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">
-            <span>Guide</span>
-            <span>Status</span>
-            <span>Updated</span>
+            <span>教程</span>
+            <span>状态</span>
+            <span>更新</span>
           </div>
           {guides.length > 0 ? (
             guides.map((guide) => (
@@ -133,13 +142,15 @@ export default async function AdminGuidesPage({
                     /guides/{guide.slug}
                   </span>
                 </span>
-                <span className="font-semibold">{guide.status.toLowerCase()}</span>
-                <span>{guide.updatedAt.toLocaleDateString("en-US")}</span>
+                <span className="font-semibold">
+                  {formatStatus(guide.status)}
+                </span>
+                <span>{guide.updatedAt.toLocaleDateString("zh-CN")}</span>
               </Link>
             ))
           ) : (
             <div className="px-4 py-10 text-center text-sm text-[var(--muted)]">
-              No guides found.
+              没有找到教程。
             </div>
           )}
         </div>

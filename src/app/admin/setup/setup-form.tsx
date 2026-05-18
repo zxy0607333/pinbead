@@ -4,11 +4,11 @@ import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 
 import {
-  loginAdminAction,
-  type AdminLoginActionState,
+  setupFirstAdminAction,
+  type AdminSetupActionState,
 } from "@/app/admin/actions";
 
-const initialState: AdminLoginActionState = {};
+const initialState: AdminSetupActionState = {};
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -19,18 +19,19 @@ function SubmitButton() {
       disabled={pending}
       type="submit"
     >
-      {pending ? "登录中..." : "登录"}
+      {pending ? "创建中..." : "创建主号"}
     </button>
   );
 }
 
-export function AdminLoginForm({ nextPath }: { nextPath: string }) {
-  const [state, formAction] = useActionState(loginAdminAction, initialState);
+export function AdminSetupForm() {
+  const [state, formAction] = useActionState(
+    setupFirstAdminAction,
+    initialState,
+  );
 
   return (
     <form action={formAction} className="mt-6 grid gap-4">
-      <input name="next" type="hidden" value={nextPath} />
-
       <label className="grid gap-2 text-sm font-semibold text-[var(--foreground)]">
         邮箱
         <input
@@ -45,9 +46,22 @@ export function AdminLoginForm({ nextPath }: { nextPath: string }) {
       <label className="grid gap-2 text-sm font-semibold text-[var(--foreground)]">
         密码
         <input
-          autoComplete="current-password"
+          autoComplete="new-password"
           className="rounded-md border border-[var(--border)] bg-white px-3 py-3 font-normal outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[rgba(36,120,106,0.15)]"
+          minLength={12}
           name="password"
+          required
+          type="password"
+        />
+      </label>
+
+      <label className="grid gap-2 text-sm font-semibold text-[var(--foreground)]">
+        确认密码
+        <input
+          autoComplete="new-password"
+          className="rounded-md border border-[var(--border)] bg-white px-3 py-3 font-normal outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[rgba(36,120,106,0.15)]"
+          minLength={12}
+          name="confirmPassword"
           required
           type="password"
         />

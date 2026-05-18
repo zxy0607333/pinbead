@@ -6,9 +6,7 @@ services:
     environment:
       POSTGRES_DB: pinbead
       POSTGRES_USER: pinbead
-      POSTGRES_PASSWORD: pinbead
-    ports:
-      - "5432:5432"
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - pinbead-postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -18,30 +16,23 @@ services:
       retries: 5
 
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
-        NEXT_PUBLIC_GA_MEASUREMENT_ID: ${NEXT_PUBLIC_GA_MEASUREMENT_ID:-}
-        NEXT_PUBLIC_ADSENSE_CLIENT_ID: ${NEXT_PUBLIC_ADSENSE_CLIENT_ID:-}
-    image: zhangxianyuan/yukid-tool:pinbead-local
+    image: zhangxianyuan/yukid-tool:pinbead-latest
     container_name: pinbead-app
     restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://pinbead:pinbead@db:5432/pinbead?schema=public
-      ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET:-pinbead-local-session-secret-change-me}
+      DATABASE_URL: postgresql://pinbead:${POSTGRES_PASSWORD}@db:5432/pinbead?schema=public
+      ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET}
       ADMIN_SESSION_MAX_AGE: ${ADMIN_SESSION_MAX_AGE:-604800}
-      ADMIN_COOKIE_SECURE: ${ADMIN_COOKIE_SECURE:-false}
+      ADMIN_COOKIE_SECURE: ${ADMIN_COOKIE_SECURE:-}
       UPLOAD_DIR: /var/lib/pinbead/uploads
       UPLOAD_PUBLIC_BASE_URL: /uploads
-      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
-      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-pinbead-local-nextauth-secret-change-me}
+      NEXTAUTH_URL: ${NEXTAUTH_URL}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
     ports:
-      - "3000:3000"
+      - "${APP_PORT:-3000}:3000"
     volumes:
       - pinbead-uploads:/var/lib/pinbead/uploads
     command: sh -c "npm run db:deploy && node server.js"

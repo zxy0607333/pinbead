@@ -8,7 +8,7 @@ import { requireAdminSession } from "@/lib/admin/auth";
 import { prisma } from "@/lib/db/prisma";
 
 export const metadata: Metadata = {
-  title: "Edit Guide",
+  title: "编辑教程",
 };
 
 type EditGuidePageProps = {
@@ -45,9 +45,9 @@ export default async function EditGuidePage({ params }: EditGuidePageProps) {
     <AdminShell>
       <section className="mx-auto w-full max-w-4xl px-5 py-8 md:px-8">
         <div className="mb-6">
-          <h1 className="text-3xl font-semibold">Edit guide</h1>
+          <h1 className="text-3xl font-semibold">编辑教程</h1>
           <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-            Update tutorial content, SEO fields, and publishing status.
+            更新教程正文、SEO 字段和发布状态。
           </p>
         </div>
         <GuideForm action={updateGuideAction.bind(null, guide.id)} guide={guide} />

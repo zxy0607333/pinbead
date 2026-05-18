@@ -4,43 +4,22 @@ import { redirect } from "next/navigation";
 import { hasAdminUsers } from "@/lib/admin/auth";
 import { getAdminSession } from "@/lib/admin/session";
 
-import { AdminLoginForm } from "./login-form";
+import { AdminSetupForm } from "./setup-form";
 
 export const metadata: Metadata = {
-  title: "后台登录",
+  title: "创建主号",
 };
 
-type AdminLoginPageProps = {
-  searchParams: Promise<{
-    next?: string | string[];
-  }>;
-};
-
-function getNextPath(next?: string | string[]) {
-  const nextPath = Array.isArray(next) ? next[0] : next;
-
-  if (!nextPath || !nextPath.startsWith("/admin")) {
-    return "/admin";
-  }
-
-  return nextPath;
-}
-
-export default async function AdminLoginPage({
-  searchParams,
-}: AdminLoginPageProps) {
+export default async function AdminSetupPage() {
   const session = await getAdminSession();
 
   if (session) {
     redirect("/admin");
   }
 
-  if (!(await hasAdminUsers())) {
-    redirect("/admin/setup");
+  if (await hasAdminUsers()) {
+    redirect("/admin/login");
   }
-
-  const { next } = await searchParams;
-  const nextPath = getNextPath(next);
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-[var(--background)] px-5 py-10 text-[var(--foreground)]">
@@ -48,12 +27,12 @@ export default async function AdminLoginPage({
         <p className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--accent)]">
           Pinbead 后台
         </p>
-        <h1 className="mt-3 text-2xl font-semibold">登录后台</h1>
+        <h1 className="mt-3 text-2xl font-semibold">创建后台主号</h1>
         <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-          使用管理员账号管理图纸、分类和教程内容。
+          这个页面只会在数据库里还没有管理员时开放。创建成功后，该账号就是当前 Pinbead 实例的主号。
         </p>
 
-        <AdminLoginForm nextPath={nextPath} />
+        <AdminSetupForm />
       </section>
     </main>
   );

@@ -28,10 +28,24 @@ function getAdminSessionSecret() {
   }
 
   if (process.env.NODE_ENV === "production") {
-    throw new Error("ADMIN_SESSION_SECRET is required in production.");
+    throw new Error("生产环境必须配置 ADMIN_SESSION_SECRET。");
   }
 
   return "pinbead-development-session-secret";
+}
+
+function getAdminCookieSecure() {
+  const configuredSecure = process.env.ADMIN_COOKIE_SECURE;
+
+  if (configuredSecure === "true") {
+    return true;
+  }
+
+  if (configuredSecure === "false") {
+    return false;
+  }
+
+  return process.env.NEXTAUTH_URL?.startsWith("https://") ?? false;
 }
 
 function encodeBase64Url(value: string) {
@@ -138,7 +152,7 @@ export async function setAdminSession({
     maxAge,
     path: "/",
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: getAdminCookieSecure(),
   });
 }
 

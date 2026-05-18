@@ -4,24 +4,27 @@ import Link from "next/link";
 import { AdminShell } from "@/components/admin/admin-shell";
 
 export const metadata: Metadata = {
-  title: "Admin",
+  title: "后台",
 };
 
 const adminSections = [
   {
-    title: "Patterns",
-    text: "Create drafts, update metadata, and publish library patterns.",
-    status: "Next",
+    href: "/admin/patterns",
+    title: "图纸管理",
+    text: "创建草稿、维护图纸元数据、上传预览图，并发布到公开图库。",
+    status: "进行中",
   },
   {
-    title: "Categories",
-    text: "Manage SEO categories for the public pattern library.",
-    status: "Planned",
+    href: "/admin",
+    title: "分类管理",
+    text: "维护公开图纸库的 SEO 分类。当前先通过图纸管理页创建基础分类。",
+    status: "未开始",
   },
   {
-    title: "Guides",
-    text: "Prepare tutorial articles for long-tail search pages.",
-    status: "Next",
+    href: "/admin/guides",
+    title: "教程管理",
+    text: "准备教程草稿、SEO 字段和发布状态，用于承接长尾搜索。",
+    status: "进行中",
   },
 ];
 
@@ -31,17 +34,16 @@ export default async function AdminPage() {
       <section className="mx-auto w-full max-w-6xl px-5 py-8 md:px-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-2xl">
-            <h1 className="text-3xl font-semibold">Content dashboard</h1>
+            <h1 className="text-3xl font-semibold">内容后台</h1>
             <p className="mt-3 text-base leading-7 text-[var(--muted)]">
-              This private workspace manages the pattern library, categories,
-              and guide content before public pages read from the database.
+              这里用于管理 Pinbead 的图纸库、分类和教程内容。只有发布后的内容才会进入公开页面和 sitemap。
             </p>
           </div>
           <Link
             className="rounded-md bg-[var(--accent)] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[var(--accent-strong)]"
             href="/admin/patterns/new"
           >
-            New pattern
+            新建图纸
           </Link>
         </div>
 
@@ -49,13 +51,7 @@ export default async function AdminPage() {
           {adminSections.map((section) => (
             <Link
               className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm"
-              href={
-                section.title === "Patterns"
-                  ? "/admin/patterns"
-                  : section.title === "Guides"
-                    ? "/admin/guides"
-                    : "/admin"
-              }
+              href={section.href}
               key={section.title}
             >
               <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--accent)]">

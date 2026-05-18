@@ -8,7 +8,7 @@ import { requireAdminSession } from "@/lib/admin/auth";
 import { prisma } from "@/lib/db/prisma";
 
 export const metadata: Metadata = {
-  title: "Edit Pattern",
+  title: "编辑图纸",
 };
 
 type EditPatternPageProps = {
@@ -66,9 +66,9 @@ export default async function EditPatternPage({ params }: EditPatternPageProps) 
     <AdminShell>
       <section className="mx-auto w-full max-w-4xl px-5 py-8 md:px-8">
         <div className="mb-6">
-          <h1 className="text-3xl font-semibold">Edit pattern</h1>
+          <h1 className="text-3xl font-semibold">编辑图纸</h1>
           <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-            Update metadata, pattern JSON, uploads, and publishing status.
+            更新图纸元数据、图纸 JSON、上传文件和发布状态。
           </p>
         </div>
         <PatternForm

@@ -54,7 +54,7 @@ function getFormString(formData: FormData, key: string) {
 
 function validateSlug(slug: string) {
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
-    throw new Error("Slug must use lowercase letters, numbers, and hyphens.");
+    throw new Error("Slug 只能使用小写字母、数字和连字符。");
   }
 }
 
@@ -92,11 +92,11 @@ async function getGuideFormData(formData: FormData, existingGuideId?: string) {
   const status = getStatus(formData);
 
   if (!title) {
-    throw new Error("Title is required.");
+    throw new Error("请填写标题。");
   }
 
   if (!slug) {
-    throw new Error("Slug is required.");
+    throw new Error("请填写 slug。");
   }
 
   validateSlug(slug);
@@ -112,12 +112,12 @@ async function getGuideFormData(formData: FormData, existingGuideId?: string) {
   });
 
   if (existingSlugGuide) {
-    throw new Error("Slug is already used by another guide.");
+    throw new Error("这个 slug 已经被其他教程使用。");
   }
 
   if (status === ContentStatus.PUBLISHED) {
     if (!summary || !content || !seoTitle || !seoDescription) {
-      throw new Error("Published guides need summary, content, and SEO fields.");
+      throw new Error("发布教程前必须填写摘要、正文内容和 SEO 字段。");
     }
   }
 
@@ -159,7 +159,7 @@ export async function createGuideAction(
   } catch (error) {
     return {
       error:
-        error instanceof Error ? error.message : "Guide could not be created.",
+        error instanceof Error ? error.message : "教程创建失败。",
     };
   }
 
@@ -185,12 +185,12 @@ export async function updateGuideAction(
     revalidatePath(`/admin/guides/${guideId}`);
 
     return {
-      success: "Guide saved.",
+      success: "教程已保存。",
     };
   } catch (error) {
     return {
       error:
-        error instanceof Error ? error.message : "Guide could not be saved.",
+        error instanceof Error ? error.message : "教程保存失败。",
     };
   }
 }

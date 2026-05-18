@@ -25,6 +25,7 @@ Pinbead 是一个拼豆图纸编辑器、可打印拼豆图库，以及图片导
 - [版本路线图](./roadmap.md)：从当前原型调整到编辑器优先、SEO 内容站和社区化的路线。
 - [内容、SEO 与 AdSense](./content-seo-adsense.md)：URL 结构、页面矩阵、分类策略、图纸内容和广告策略。
 - [AdSense 上线前体检](./adsense-readiness-audit.md)：提交审核前的页面、内容、广告位和合规检查。
+- [首批内容生产计划](./content-production-plan.md)：首批图纸、教程、分类、文案模板和发布 QA。
 
 ## 当前推荐 URL
 
